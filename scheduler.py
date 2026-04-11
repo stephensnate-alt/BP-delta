@@ -2,18 +2,26 @@
 """
 Scheduler for automated BP-Delta runs.
 
+Schedule:
+    6:00 AM  - Grade yesterday's bets + scrape today's edges + stock reports
+    10:00 PM - Scrape next day's edges
+
 Can be used standalone (built-in loop) or with cron.
 
 Cron examples (add to crontab with `crontab -e`):
 
-    # Scrape edges at 12:30 PM ET daily (before most first pitches)
-    30 12 * * * cd /path/to/BP-delta && /path/to/venv/bin/python cli.py scrape
+    # 6 AM: grade yesterday + analyze today + reports
+    0 6 * * * cd /path/to/BP-delta && /path/to/venv/bin/python cli.py grade --date yesterday
+    5 6 * * * cd /path/to/BP-delta && /path/to/venv/bin/python cli.py analyze
 
-    # Check results at 1:00 AM ET (after all games finish)
-    0 1 * * * cd /path/to/BP-delta && /path/to/venv/bin/python cli.py results
+    # 10 PM: analyze for next day
+    0 22 * * * cd /path/to/BP-delta && /path/to/venv/bin/python cli.py analyze
 
 Standalone usage:
-    python scheduler.py --scrape-at 12:30 --results-at 01:00
+    python scheduler.py
+    python scheduler.py --morning 06:00 --evening 22:00
+    python scheduler.py --run-once morning
+    python scheduler.py --run-once evening
 """
 
 import argparse
@@ -22,7 +30,7 @@ import time
 import sys
 import os
 import fcntl
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from pathlib import Path
 
 logging.basicConfig(
@@ -41,7 +49,6 @@ def acquire_lock():
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         fd.write(str(os.getpid()))
         fd.flush()
-        # Keep fd open to hold the lock
         acquire_lock._fd = fd
         return True
     except (IOError, OSError):
@@ -60,29 +67,32 @@ def release_lock():
             pass
 
 
-def run_scrape():
-    """Run the scrape command."""
+def run_analyze():
+    """Scrape BP for today's DK positive EV bets."""
     from scraper import scrape_bets
     from sheets import append_bets
 
-    logger.info("Running scheduled scrape...")
+    logger.info("Running analysis...")
     bets = scrape_bets()
     if bets:
         added = append_bets(bets)
-        logger.info(f"Scrape complete: {len(bets)} found, {added} new.")
+        logger.info(f"Analysis complete: {len(bets)} found, {added} new.")
     else:
-        logger.info("Scrape complete: no qualifying bets found.")
+        logger.info("Analysis complete: no qualifying bets found.")
 
 
-def run_results():
-    """Run the results check command."""
-    from sheets import get_pending_bets, batch_update_results
+def run_grade():
+    """Grade pending bets and print stock reports."""
+    from sheets import (
+        get_pending_bets, batch_update_results,
+        get_all_completed_bets, get_bets_in_range,
+    )
     from results import check_results
 
-    logger.info("Running scheduled results check...")
+    logger.info("Running grading...")
     pending = get_pending_bets()
     if not pending:
-        logger.info("No pending bets to check.")
+        logger.info("No pending bets to grade.")
         return
 
     updates = check_results(pending)
@@ -90,72 +100,171 @@ def run_results():
         batch_update_results(updates)
         wins = sum(1 for _, r, _ in updates if r == "W")
         losses = sum(1 for _, r, _ in updates if r == "L")
-        logger.info(f"Results: {len(updates)} graded, {wins}W-{losses}L")
+        pushes = sum(1 for _, r, _ in updates if r == "P")
+        total_profit = sum(p for _, _, p in updates)
+        logger.info(
+            f"Graded {len(updates)} bets: {wins}W-{losses}L-{pushes}P "
+            f"(${total_profit:+,.2f})"
+        )
     else:
         logger.info("No games finalized yet.")
 
+    # Stock reports
+    _log_stock_reports()
 
-def run_loop(scrape_time, results_time):
+
+def _log_stock_reports():
+    """Log the stock reports after grading."""
+    from sheets import get_all_completed_bets, get_bets_in_range
+    import config
+
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    week_ago = today - timedelta(days=7)
+
+    # Yesterday
+    yest_bets = [
+        b for b in get_bets_in_range(yesterday.isoformat(), yesterday.isoformat())
+        if b.get("result") in ("W", "L", "P")
+    ]
+    if yest_bets:
+        _log_summary(f"Yesterday ({yesterday})", yest_bets)
+
+    # Last 7 days
+    week_bets = [
+        b for b in get_bets_in_range(week_ago.isoformat(), today.isoformat())
+        if b.get("result") in ("W", "L", "P")
+    ]
+    if week_bets:
+        _log_summary(f"Last 7 Days", week_bets)
+        _log_bands(week_bets)
+
+    # All time
+    all_bets = get_all_completed_bets()
+    if all_bets:
+        _log_summary("All Time", all_bets)
+        _log_bands(all_bets)
+
+
+def _log_summary(label, bets):
+    """Log a quick summary line."""
+    import config
+    wins = sum(1 for b in bets if b["result"] == "W")
+    losses = sum(1 for b in bets if b["result"] == "L")
+    pushes = sum(1 for b in bets if b["result"] == "P")
+    total_profit = sum(float(b["profit"]) for b in bets if b.get("profit"))
+    wagered = len(bets) * config.BET_SIZE
+    roi = (total_profit / wagered * 100) if wagered > 0 else 0
+    logger.info(
+        f"[{label}] {wins}-{losses}-{pushes} | "
+        f"P/L: ${total_profit:+,.2f} | ROI: {roi:+.1f}%"
+    )
+
+
+def _log_bands(bets):
+    """Log edge band breakdown."""
+    import config
+    for low, high, label in config.EDGE_BANDS:
+        band = [b for b in bets
+                if _parse_delta(b) is not None and low <= _parse_delta(b) <= high]
+        if not band:
+            continue
+        w = sum(1 for b in band if b["result"] == "W")
+        l = sum(1 for b in band if b["result"] == "L")
+        p = sum(float(b["profit"]) for b in band if b.get("profit"))
+        logger.info(f"  {label}: {w}-{l} | ${p:+,.2f}")
+
+
+def _parse_delta(bet):
+    try:
+        return float(bet["delta_pct"])
+    except (ValueError, TypeError):
+        return None
+
+
+def run_morning():
+    """6 AM job: grade yesterday + analyze today + stock reports."""
+    logger.info("=== MORNING RUN (6 AM) ===")
+    run_grade()
+    run_analyze()
+    logger.info("=== MORNING RUN COMPLETE ===")
+
+
+def run_evening():
+    """10 PM job: analyze for next day's edges."""
+    logger.info("=== EVENING RUN (10 PM) ===")
+    run_analyze()
+    logger.info("=== EVENING RUN COMPLETE ===")
+
+
+def run_loop(morning_time, evening_time):
     """
-    Run a continuous loop, executing scrape and results at specified times.
+    Run a continuous loop with the two daily jobs.
 
     Args:
-        scrape_time: "HH:MM" string for daily scrape time.
-        results_time: "HH:MM" string for daily results check time.
+        morning_time: "HH:MM" for the morning run (default "06:00").
+        evening_time: "HH:MM" for the evening run (default "22:00").
     """
-    scrape_h, scrape_m = map(int, scrape_time.split(":"))
-    results_h, results_m = map(int, results_time.split(":"))
+    morning_h, morning_m = map(int, morning_time.split(":"))
+    evening_h, evening_m = map(int, evening_time.split(":"))
 
-    last_scrape_date = None
-    last_results_date = None
+    last_morning_date = None
+    last_evening_date = None
 
-    logger.info(f"Scheduler started. Scrape at {scrape_time}, results at {results_time}")
+    logger.info(
+        f"Scheduler started. Morning at {morning_time}, evening at {evening_time}"
+    )
 
     while True:
         now = datetime.now()
         today = now.date()
 
-        # Check if it's time to scrape
-        if (now.hour == scrape_h and now.minute == scrape_m
-                and last_scrape_date != today):
+        # Morning run
+        if (now.hour == morning_h and now.minute == morning_m
+                and last_morning_date != today):
             try:
-                run_scrape()
-                last_scrape_date = today
+                run_morning()
+                last_morning_date = today
             except Exception:
-                logger.exception("Scrape failed")
+                logger.exception("Morning run failed")
 
-        # Check if it's time to check results
-        if (now.hour == results_h and now.minute == results_m
-                and last_results_date != today):
+        # Evening run
+        if (now.hour == evening_h and now.minute == evening_m
+                and last_evening_date != today):
             try:
-                run_results()
-                last_results_date = today
+                run_evening()
+                last_evening_date = today
             except Exception:
-                logger.exception("Results check failed")
+                logger.exception("Evening run failed")
 
-        time.sleep(30)  # Check every 30 seconds
+        time.sleep(30)
 
 
 def main():
     parser = argparse.ArgumentParser(description="BP-Delta Scheduler")
-    parser.add_argument("--scrape-at", default="12:30",
-                        help="Time to scrape (HH:MM, default 12:30)")
-    parser.add_argument("--results-at", default="01:00",
-                        help="Time to check results (HH:MM, default 01:00)")
-    parser.add_argument("--run-once", choices=["scrape", "results"],
-                        help="Run a single task and exit")
+    parser.add_argument("--morning", default="06:00",
+                        help="Morning run time (HH:MM, default 06:00)")
+    parser.add_argument("--evening", default="22:00",
+                        help="Evening run time (HH:MM, default 22:00)")
+    parser.add_argument("--run-once",
+                        choices=["morning", "evening", "analyze", "grade"],
+                        help="Run a single job and exit")
     args = parser.parse_args()
 
     if not acquire_lock():
         sys.exit(1)
 
     try:
-        if args.run_once == "scrape":
-            run_scrape()
-        elif args.run_once == "results":
-            run_results()
+        if args.run_once == "morning":
+            run_morning()
+        elif args.run_once == "evening":
+            run_evening()
+        elif args.run_once == "analyze":
+            run_analyze()
+        elif args.run_once == "grade":
+            run_grade()
         else:
-            run_loop(args.scrape_at, args.results_at)
+            run_loop(args.morning, args.evening)
     finally:
         release_lock()
 

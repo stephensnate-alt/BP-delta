@@ -3,9 +3,9 @@
 BP-Delta CLI: Ballpark Pal bet tracker.
 
 Commands:
-    scrape          Scrape BP for DK bets with positive edge
-    results         Grade pending bets against actual MLB results
-    report          Profitability report by date range and/or edge band
+    analyze         Scrape BP for DK bets with positive edge
+    grade           Grade pending bets + auto-print stock reports
+    report          Custom profitability report (date range, bands, markets)
 """
 
 import logging
@@ -41,6 +41,9 @@ def cli(verbose):
     setup_logging(verbose)
 
 
+# ─── ANALYZE (scrape BP for edges) ───────────────────────────────
+
+
 @cli.command()
 @click.option("--threshold", "-t", type=float, default=None,
               help=f"Minimum edge %% (default: {config.EDGE_THRESHOLD})")
@@ -48,8 +51,8 @@ def cli(verbose):
               help="Scrape and display bets without writing to sheet")
 @click.option("--no-headless", is_flag=True,
               help="Show browser window (for debugging)")
-def scrape(threshold, dry_run, no_headless):
-    """Scrape today's BP edges and log qualifying DK bets."""
+def analyze(threshold, dry_run, no_headless):
+    """Scrape BP for today's DK bets with positive edge."""
     t = threshold or config.EDGE_THRESHOLD
     click.echo(f"Scraping BP for DK bets with delta% >= {t}%...")
 
@@ -81,11 +84,14 @@ def scrape(threshold, dry_run, no_headless):
     click.echo(f"{added} new bets written to Google Sheet.")
 
 
-@cli.command("results")
+# ─── GRADE (check results + auto stock reports) ─────────────────
+
+
+@cli.command()
 @click.option("--date", "-d", "game_date", default=None,
-              help="Check results for a specific date (YYYY-MM-DD or 'yesterday')")
-def check_results_cmd(game_date):
-    """Grade pending bets against actual MLB box scores."""
+              help="Grade a specific date (YYYY-MM-DD or 'yesterday')")
+def grade(game_date):
+    """Grade pending bets and print stock reports."""
     click.echo("Fetching pending bets from sheet...")
 
     pending = get_pending_bets()
@@ -122,8 +128,44 @@ def check_results_cmd(game_date):
     pushes = sum(1 for _, r, _ in updates if r == "P")
     total_profit = sum(p for _, _, p in updates)
 
-    click.echo(f"\nUpdated {len(updates)} bets: {wins}W-{losses}L-{pushes}P")
-    click.echo(f"Session P/L: {total_profit:+.2f}")
+    click.echo(f"\nGraded {len(updates)} bets: {wins}W-{losses}L-{pushes}P")
+    click.echo(f"Session P/L: ${total_profit:+,.2f}")
+
+    # ── Auto stock reports after grading ──
+    _run_stock_reports()
+
+
+def _run_stock_reports():
+    """Print the stock reports: today, last 7 days, all time, by band."""
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    week_ago = today - timedelta(days=7)
+
+    # 1. Today's results
+    today_bets = get_bets_in_range(today.isoformat(), today.isoformat())
+    today_completed = [b for b in today_bets if b.get("result") in ("W", "L", "P")]
+    if today_completed:
+        _print_report(today_completed, f"Today ({today.isoformat()})", by_band=False)
+
+    # 2. Yesterday's results
+    yest_bets = get_bets_in_range(yesterday.isoformat(), yesterday.isoformat())
+    yest_completed = [b for b in yest_bets if b.get("result") in ("W", "L", "P")]
+    if yest_completed:
+        _print_report(yest_completed, f"Yesterday ({yesterday.isoformat()})", by_band=False)
+
+    # 3. Last 7 days
+    week_bets = get_bets_in_range(week_ago.isoformat(), today.isoformat())
+    week_completed = [b for b in week_bets if b.get("result") in ("W", "L", "P")]
+    if week_completed:
+        _print_report(week_completed, f"Last 7 Days ({week_ago} to {today})", by_band=True)
+
+    # 4. All time with bands
+    all_bets = get_all_completed_bets()
+    if all_bets:
+        _print_report(all_bets, "All Time", by_band=True)
+
+
+# ─── REPORT (custom) ────────────────────────────────────────────
 
 
 @cli.command()
@@ -133,26 +175,59 @@ def check_results_cmd(game_date):
               help="End date (YYYY-MM-DD)")
 @click.option("--by-band", is_flag=True,
               help="Break down by edge percentage band")
-def report(start, end, by_band):
+@click.option("--by-market", is_flag=True,
+              help="Break down by market/prop type")
+@click.option("--last-week", is_flag=True,
+              help="Report for the last 7 days")
+@click.option("--today", "show_today", is_flag=True,
+              help="Report for today only")
+@click.option("--yesterday", "show_yesterday", is_flag=True,
+              help="Report for yesterday only")
+@click.option("--all", "show_all", is_flag=True,
+              help="Full stock report (today, yesterday, last week, all time + bands)")
+def report(start, end, by_band, by_market, last_week, show_today, show_yesterday, show_all):
     """Generate profitability report."""
+    today = date.today()
+
+    # --all: run the full stock report suite
+    if show_all:
+        _run_stock_reports()
+        return
+
+    # Shortcut flags
+    if show_today:
+        start = today.isoformat()
+        end = today.isoformat()
+    elif show_yesterday:
+        yest = today - timedelta(days=1)
+        start = yest.isoformat()
+        end = yest.isoformat()
+    elif last_week:
+        start = (today - timedelta(days=7)).isoformat()
+        end = today.isoformat()
+        by_band = True  # always show bands for week view
+
     if start and end:
         bets = get_bets_in_range(start, end)
         date_label = f"{start} to {end}"
     else:
         bets = get_all_completed_bets()
         date_label = "All Time"
+        by_band = True  # always show bands for all time
 
-    # Filter to only completed bets
     completed = [b for b in bets if b.get("result") in ("W", "L", "P")]
 
     if not completed:
         click.echo("No completed bets found for the given range.")
         return
 
-    _print_report(completed, date_label, by_band)
+    _print_report(completed, date_label, by_band=by_band, by_market=by_market)
 
 
-def _print_report(bets, date_label, by_band):
+# ─── Report printer ─────────────────────────────────────────────
+
+
+def _print_report(bets, date_label, by_band=False, by_market=True):
     """Print a formatted profitability report."""
     bet_size = config.BET_SIZE
 
@@ -173,12 +248,12 @@ def _print_report(bets, date_label, by_band):
     roi = (total_profit / wagered * 100) if wagered > 0 else 0
 
     click.echo(f"\n{'=' * 55}")
-    click.echo(f"  Profitability Report: {date_label}")
+    click.echo(f"  {date_label}")
     click.echo(f"{'=' * 55}")
     click.echo(f"  Total Bets:    {total}")
     click.echo(f"  Record:        {wins}-{losses}-{pushes} ({win_pct:.1f}%)")
     click.echo(f"  Total Wagered: ${wagered:,.2f}")
-    click.echo(f"  Total Profit:  {'+' if total_profit >= 0 else ''}"
+    click.echo(f"  Total Profit:  {'+'if total_profit >= 0 else ''}"
                f"${total_profit:,.2f}")
     click.echo(f"  ROI:           {roi:+.1f}%")
 
@@ -188,74 +263,64 @@ def _print_report(bets, date_label, by_band):
         click.echo(f"  {'-' * 52}")
 
         for low, high, label in config.EDGE_BANDS:
-            band_bets = []
-            for b in bets:
-                try:
-                    dpct = float(b["delta_pct"])
-                except (ValueError, TypeError):
-                    continue
-                if low <= dpct <= high:
-                    band_bets.append(b)
-
+            band_bets = _filter_by_delta(bets, low, high)
             if not band_bets:
                 continue
+            _print_breakdown_line(band_bets, label, bet_size)
 
-            bw = sum(1 for b in band_bets if b["result"] == "W")
-            bl = sum(1 for b in band_bets if b["result"] == "L")
-            bp = sum(1 for b in band_bets if b["result"] == "P")
-            bt = len(band_bets)
+    if by_market:
+        click.echo(f"\n  {'Market':<22} {'Record':<12} {'Win%':<8} "
+                   f"{'Profit':<12} {'ROI':<8}")
+        click.echo(f"  {'-' * 60}")
 
-            bprofit = 0
-            for b in band_bets:
-                try:
-                    bprofit += float(b["profit"])
-                except (ValueError, TypeError):
-                    pass
+        markets = {}
+        for b in bets:
+            m = b.get("market", "Unknown")
+            if m not in markets:
+                markets[m] = []
+            markets[m].append(b)
 
-            bwagered = bt * bet_size
-            bwin_pct = (bw / (bw + bl) * 100) if (bw + bl) > 0 else 0
-            broi = (bprofit / bwagered * 100) if bwagered > 0 else 0
-
-            record = f"{bw}-{bl}-{bp}"
-            click.echo(f"  {label:<14} {record:<12} {bwin_pct:<8.1f} "
-                       f"{'+'if bprofit >= 0 else ''}"
-                       f"${bprofit:<11,.2f} {broi:+.1f}%")
-
-    # Also show breakdown by market type
-    click.echo(f"\n  {'Market':<22} {'Record':<12} {'Win%':<8} "
-               f"{'Profit':<12} {'ROI':<8}")
-    click.echo(f"  {'-' * 60}")
-
-    markets = {}
-    for b in bets:
-        m = b.get("market", "Unknown")
-        if m not in markets:
-            markets[m] = []
-        markets[m].append(b)
-
-    for market, mbets in sorted(markets.items()):
-        mw = sum(1 for b in mbets if b["result"] == "W")
-        ml = sum(1 for b in mbets if b["result"] == "L")
-        mp = sum(1 for b in mbets if b["result"] == "P")
-        mt = len(mbets)
-
-        mprofit = 0
-        for b in mbets:
-            try:
-                mprofit += float(b["profit"])
-            except (ValueError, TypeError):
-                pass
-
-        mwagered = mt * bet_size
-        mwin_pct = (mw / (mw + ml) * 100) if (mw + ml) > 0 else 0
-        mroi = (mprofit / mwagered * 100) if mwagered > 0 else 0
-
-        record = f"{mw}-{ml}-{mp}"
-        click.echo(f"  {market:<22} {record:<12} {mwin_pct:<8.1f} "
-                   f"{'+'if mprofit >= 0 else ''}"
-                   f"${mprofit:<11,.2f} {mroi:+.1f}%")
+        for market, mbets in sorted(markets.items()):
+            _print_breakdown_line(mbets, market, bet_size, label_width=22)
 
     click.echo()
+
+
+def _filter_by_delta(bets, low, high):
+    """Filter bets by delta% range."""
+    result = []
+    for b in bets:
+        try:
+            dpct = float(b["delta_pct"])
+        except (ValueError, TypeError):
+            continue
+        if low <= dpct <= high:
+            result.append(b)
+    return result
+
+
+def _print_breakdown_line(bets, label, bet_size, label_width=14):
+    """Print a single breakdown line (used for bands and markets)."""
+    bw = sum(1 for b in bets if b["result"] == "W")
+    bl = sum(1 for b in bets if b["result"] == "L")
+    bp = sum(1 for b in bets if b["result"] == "P")
+    bt = len(bets)
+
+    bprofit = 0
+    for b in bets:
+        try:
+            bprofit += float(b["profit"])
+        except (ValueError, TypeError):
+            pass
+
+    bwagered = bt * bet_size
+    bwin_pct = (bw / (bw + bl) * 100) if (bw + bl) > 0 else 0
+    broi = (bprofit / bwagered * 100) if bwagered > 0 else 0
+
+    record = f"{bw}-{bl}-{bp}"
+    click.echo(f"  {label:<{label_width}} {record:<12} {bwin_pct:<8.1f} "
+               f"{'+'if bprofit >= 0 else ''}"
+               f"${bprofit:<11,.2f} {broi:+.1f}%")
 
 
 if __name__ == "__main__":
