@@ -68,13 +68,16 @@ def analyze(threshold, dry_run, no_headless):
 
     # Display found bets
     click.echo(f"\n{'Player':<20} {'Market':<20} {'O/U':<4} {'Line':<6} "
-               f"{'Odds':<6} {'Delta%':<8} {'Team':<5}")
-    click.echo("-" * 75)
+               f"{'Odds':<6} {'Delta%':<8} {'Exp $':<8} {'Team':<5}")
+    click.echo("-" * 83)
+    total_exp = 0
     for b in bets:
+        exp = b.get('exp_profit', 0)
+        total_exp += exp
         click.echo(f"{b['player']:<20} {b['market']:<20} {b['over_under']:<4} "
                    f"{b['line']:<6} {b['odds']:<6} {b['delta_pct']:<8.1f} "
-                   f"{b['team']:<5}")
-    click.echo(f"\n{len(bets)} bets found.")
+                   f"${exp:<7.2f} {b['team']:<5}")
+    click.echo(f"\n{len(bets)} bets found. Total expected profit: ${total_exp:+,.2f}")
 
     if dry_run:
         click.echo("(Dry run - not writing to sheet)")
@@ -227,8 +230,30 @@ def report(start, end, by_band, by_market, last_week, show_today, show_yesterday
 # ─── Report printer ─────────────────────────────────────────────
 
 
+def _sum_expected(bets):
+    """Sum expected profit across a list of bets."""
+    total = 0
+    for b in bets:
+        try:
+            total += float(b.get("exp_profit", 0))
+        except (ValueError, TypeError):
+            pass
+    return total
+
+
+def _sum_actual(bets):
+    """Sum actual profit across a list of bets."""
+    total = 0
+    for b in bets:
+        try:
+            total += float(b.get("profit", 0))
+        except (ValueError, TypeError):
+            pass
+    return total
+
+
 def _print_report(bets, date_label, by_band=False, by_market=True):
-    """Print a formatted profitability report."""
+    """Print a formatted profitability report with expected vs actual."""
     bet_size = config.BET_SIZE
 
     wins = sum(1 for b in bets if b["result"] == "W")
@@ -236,31 +261,29 @@ def _print_report(bets, date_label, by_band=False, by_market=True):
     pushes = sum(1 for b in bets if b["result"] == "P")
     total = len(bets)
 
-    total_profit = 0
-    for b in bets:
-        try:
-            total_profit += float(b["profit"])
-        except (ValueError, TypeError):
-            pass
+    total_exp = _sum_expected(bets)
+    total_actual = _sum_actual(bets)
+    diff = total_actual - total_exp
 
     wagered = total * bet_size
     win_pct = (wins / (wins + losses) * 100) if (wins + losses) > 0 else 0
-    roi = (total_profit / wagered * 100) if wagered > 0 else 0
+    actual_roi = (total_actual / wagered * 100) if wagered > 0 else 0
+    exp_roi = (total_exp / wagered * 100) if wagered > 0 else 0
 
-    click.echo(f"\n{'=' * 55}")
+    click.echo(f"\n{'=' * 60}")
     click.echo(f"  {date_label}")
-    click.echo(f"{'=' * 55}")
-    click.echo(f"  Total Bets:    {total}")
-    click.echo(f"  Record:        {wins}-{losses}-{pushes} ({win_pct:.1f}%)")
-    click.echo(f"  Total Wagered: ${wagered:,.2f}")
-    click.echo(f"  Total Profit:  {'+'if total_profit >= 0 else ''}"
-               f"${total_profit:,.2f}")
-    click.echo(f"  ROI:           {roi:+.1f}%")
+    click.echo(f"{'=' * 60}")
+    click.echo(f"  Total Bets:      {total}")
+    click.echo(f"  Record:          {wins}-{losses}-{pushes} ({win_pct:.1f}%)")
+    click.echo(f"  Total Wagered:   ${wagered:,.2f}")
+    click.echo(f"  Expected Profit: ${total_exp:+,.2f}  (ROI: {exp_roi:+.1f}%)")
+    click.echo(f"  Actual Profit:   ${total_actual:+,.2f}  (ROI: {actual_roi:+.1f}%)")
+    click.echo(f"  vs Expected:     ${diff:+,.2f}")
 
     if by_band:
-        click.echo(f"\n  {'Edge Band':<14} {'Record':<12} {'Win%':<8} "
-                   f"{'Profit':<12} {'ROI':<8}")
-        click.echo(f"  {'-' * 52}")
+        click.echo(f"\n  {'Edge Band':<14} {'Record':<10} {'Win%':<7} "
+                   f"{'Expected':<11} {'Actual':<11} {'vs Exp':<10}")
+        click.echo(f"  {'-' * 63}")
 
         for low, high, label in config.EDGE_BANDS:
             band_bets = _filter_by_delta(bets, low, high)
@@ -269,9 +292,9 @@ def _print_report(bets, date_label, by_band=False, by_market=True):
             _print_breakdown_line(band_bets, label, bet_size)
 
     if by_market:
-        click.echo(f"\n  {'Market':<22} {'Record':<12} {'Win%':<8} "
-                   f"{'Profit':<12} {'ROI':<8}")
-        click.echo(f"  {'-' * 60}")
+        click.echo(f"\n  {'Market':<22} {'Record':<10} {'Win%':<7} "
+                   f"{'Expected':<11} {'Actual':<11} {'vs Exp':<10}")
+        click.echo(f"  {'-' * 71}")
 
         markets = {}
         for b in bets:
@@ -300,27 +323,20 @@ def _filter_by_delta(bets, low, high):
 
 
 def _print_breakdown_line(bets, label, bet_size, label_width=14):
-    """Print a single breakdown line (used for bands and markets)."""
+    """Print a single breakdown line with expected vs actual."""
     bw = sum(1 for b in bets if b["result"] == "W")
     bl = sum(1 for b in bets if b["result"] == "L")
     bp = sum(1 for b in bets if b["result"] == "P")
-    bt = len(bets)
 
-    bprofit = 0
-    for b in bets:
-        try:
-            bprofit += float(b["profit"])
-        except (ValueError, TypeError):
-            pass
+    exp = _sum_expected(bets)
+    actual = _sum_actual(bets)
+    diff = actual - exp
 
-    bwagered = bt * bet_size
     bwin_pct = (bw / (bw + bl) * 100) if (bw + bl) > 0 else 0
-    broi = (bprofit / bwagered * 100) if bwagered > 0 else 0
 
     record = f"{bw}-{bl}-{bp}"
-    click.echo(f"  {label:<{label_width}} {record:<12} {bwin_pct:<8.1f} "
-               f"{'+'if bprofit >= 0 else ''}"
-               f"${bprofit:<11,.2f} {broi:+.1f}%")
+    click.echo(f"  {label:<{label_width}} {record:<10} {bwin_pct:<7.1f} "
+               f"${exp:<+10,.2f} ${actual:<+10,.2f} ${diff:+,.2f}")
 
 
 if __name__ == "__main__":

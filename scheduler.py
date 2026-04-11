@@ -146,23 +146,37 @@ def _log_stock_reports():
         _log_bands(all_bets)
 
 
+def _sum_profit(bets, key):
+    """Sum a profit field safely."""
+    total = 0
+    for b in bets:
+        try:
+            total += float(b.get(key, 0))
+        except (ValueError, TypeError):
+            pass
+    return total
+
+
 def _log_summary(label, bets):
-    """Log a quick summary line."""
+    """Log a quick summary line with expected vs actual."""
     import config
     wins = sum(1 for b in bets if b["result"] == "W")
     losses = sum(1 for b in bets if b["result"] == "L")
     pushes = sum(1 for b in bets if b["result"] == "P")
-    total_profit = sum(float(b["profit"]) for b in bets if b.get("profit"))
+    exp = _sum_profit(bets, "exp_profit")
+    actual = _sum_profit(bets, "profit")
+    diff = actual - exp
     wagered = len(bets) * config.BET_SIZE
-    roi = (total_profit / wagered * 100) if wagered > 0 else 0
+    roi = (actual / wagered * 100) if wagered > 0 else 0
     logger.info(
         f"[{label}] {wins}-{losses}-{pushes} | "
-        f"P/L: ${total_profit:+,.2f} | ROI: {roi:+.1f}%"
+        f"Exp: ${exp:+,.2f} | Actual: ${actual:+,.2f} | "
+        f"vs Exp: ${diff:+,.2f} | ROI: {roi:+.1f}%"
     )
 
 
 def _log_bands(bets):
-    """Log edge band breakdown."""
+    """Log edge band breakdown with expected vs actual."""
     import config
     for low, high, label in config.EDGE_BANDS:
         band = [b for b in bets
@@ -171,8 +185,9 @@ def _log_bands(bets):
             continue
         w = sum(1 for b in band if b["result"] == "W")
         l = sum(1 for b in band if b["result"] == "L")
-        p = sum(float(b["profit"]) for b in band if b.get("profit"))
-        logger.info(f"  {label}: {w}-{l} | ${p:+,.2f}")
+        exp = _sum_profit(band, "exp_profit")
+        actual = _sum_profit(band, "profit")
+        logger.info(f"  {label}: {w}-{l} | Exp: ${exp:+,.2f} | Actual: ${actual:+,.2f}")
 
 
 def _parse_delta(bet):

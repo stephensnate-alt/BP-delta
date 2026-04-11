@@ -20,12 +20,14 @@ SCOPES = [
 
 HEADERS = [
     "Date", "Team", "Player", "Market", "O/U", "Line",
-    "Odds", "CS%", "Delta", "BP", "Delta%", "Result", "Profit",
+    "Odds", "CS%", "Delta", "BP", "Delta%", "Exp Profit",
+    "Result", "Actual Profit",
 ]
 
 # Column indices in the sheet (1-based for gspread)
-COL_RESULT = 12
-COL_PROFIT = 13
+COL_EXP_PROFIT = 12
+COL_RESULT = 13
+COL_PROFIT = 14
 
 
 def get_sheet():
@@ -68,6 +70,7 @@ def bet_to_row(bet):
         bet["delta"],
         bet["bp"],
         bet["delta_pct"],
+        bet.get("exp_profit", ""),
         bet.get("result", ""),
         bet.get("profit", ""),
     ]
@@ -89,8 +92,9 @@ def row_to_bet(row):
         "delta": padded[8],
         "bp": padded[9],
         "delta_pct": padded[10],
-        "result": padded[11],
-        "profit": padded[12],
+        "exp_profit": padded[11],
+        "result": padded[12],
+        "profit": padded[13],
     }
 
 

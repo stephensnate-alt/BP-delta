@@ -121,6 +121,10 @@ def parse_positive_ev(page, edge_threshold=None):
             logger.warning(f"Could not parse line: {line_str!r}")
             continue
 
+        # Calculate expected profit from the edge
+        # EV = edge% * bet_size (e.g., 17.5% edge on $100 = $17.50)
+        exp_profit = round(delta_pct / 100 * config.BET_SIZE, 2)
+
         bet = {
             "date": today,
             "team": text[COL_TEAM],
@@ -133,6 +137,7 @@ def parse_positive_ev(page, edge_threshold=None):
             "delta": text[COL_DELTA],
             "bp": text[COL_BP],
             "delta_pct": delta_pct,
+            "exp_profit": exp_profit,
             "result": "",
             "profit": "",
         }
