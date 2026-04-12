@@ -354,7 +354,39 @@ def _print_report(bets, date_label, by_band=False, by_market=True):
         for market, mbets in sorted(markets.items()):
             _print_breakdown_line(mbets, market, bet_size, label_width=22)
 
+    # Always show odds bands when showing bands or market
+    if by_band or by_market:
+        click.echo(f"\n  {'Odds Range':<16} {'Record':<10} {'Win%':<7} "
+                   f"{'Expected':<11} {'Actual':<11} {'vs Exp':<10}")
+        click.echo(f"  {'-' * 65}")
+
+        for low, high, label in config.ODDS_BANDS:
+            odds_bets = _filter_by_odds(bets, low, high)
+            if not odds_bets:
+                continue
+            _print_breakdown_line(odds_bets, label, bet_size, label_width=16)
+
     click.echo()
+
+
+def _filter_by_odds(bets, low, high):
+    """Filter bets by American odds range."""
+    result = []
+    for b in bets:
+        try:
+            odds = int(b["odds"])
+        except (ValueError, TypeError):
+            continue
+        if low >= 0 and high >= 0:
+            # Positive range
+            if low <= odds <= high:
+                result.append(b)
+        else:
+            # Negative range: low is closer to 0 (e.g., 0), high is more negative (e.g., -199)
+            # So we want odds between high and low (e.g., -199 <= odds <= 0)
+            if high <= odds <= low:
+                result.append(b)
+    return result
 
 
 def _filter_by_delta(bets, low, high):

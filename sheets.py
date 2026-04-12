@@ -298,6 +298,13 @@ def _calc_stats(bets):
     }
 
 
+def _parse_odds(bet):
+    try:
+        return int(bet["odds"])
+    except (ValueError, TypeError):
+        return None
+
+
 def update_reports_tab():
     """Write reports to a 'Reports' tab in the Google Sheet."""
     from datetime import date, timedelta
@@ -390,6 +397,27 @@ def update_reports_tab():
         if s:
             rows.append([
                 market, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
+                f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
+                f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
+            ])
+
+    # Odds bands
+    rows.append([])
+    rows.append(["BY ODDS RANGE"])
+    rows.append(["Odds Range", "Bets", "Record", "Win%", "Wagered",
+                 "Expected", "Actual", "vs Expected", "ROI"])
+    for low, high, label in config.ODDS_BANDS:
+        if low >= 0 and high >= 0:
+            odds_bets = [b for b in completed
+                         if _parse_odds(b) is not None and low <= _parse_odds(b) <= high]
+        else:
+            odds_bets = [b for b in completed
+                         if _parse_odds(b) is not None and high <= _parse_odds(b) <= low]
+        s = _calc_stats(odds_bets)
+        if s:
+            rows.append([
+                label, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
                 f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
                 f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
                 f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
