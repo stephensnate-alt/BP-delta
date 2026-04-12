@@ -1,7 +1,6 @@
 """Run this once to authorize Google Sheets access. Opens your browser."""
 
 import json
-import webbrowser
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 SCOPES = [
@@ -10,8 +9,11 @@ SCOPES = [
 ]
 
 print("Opening your browser to sign in with Google...")
+print("Sign in, click Allow, then wait for it to redirect.")
+print()
+
 flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-creds = flow.run_local_server(port=0, open_browser=True)
+creds = flow.run_local_server(port=8090, open_browser=True, timeout_seconds=300)
 
 token_data = {
     "token": creds.token,
@@ -23,6 +25,6 @@ token_data = {
 }
 
 with open("token.json", "w") as f:
-    json.dump(token_data)
+    json.dump(token_data, f)
 
 print("Done! Google Sheets access authorized.")
