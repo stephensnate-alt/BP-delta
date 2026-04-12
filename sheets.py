@@ -27,11 +27,35 @@ COL_PROFIT = 14
 
 def get_sheet():
     """Authenticate and return the Tracked Bets worksheet."""
-    # Use OAuth2 flow (opens browser on first run, saves token for future runs)
-    client = gspread.oauth(
-        credentials_filename=config.GOOGLE_CREDENTIALS_FILE,
-        authorized_user_filename=config.GOOGLE_TOKEN_FILE,
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    import json
+
+    SCOPES = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
+    with open(config.GOOGLE_TOKEN_FILE) as f:
+        token_data = json.load(f)
+
+    creds = Credentials(
+        token=token_data["token"],
+        refresh_token=token_data["refresh_token"],
+        token_uri=token_data["token_uri"],
+        client_id=token_data["client_id"],
+        client_secret=token_data["client_secret"],
+        scopes=SCOPES,
     )
+
+    if creds.expired:
+        creds.refresh(Request())
+        # Save refreshed token
+        token_data["token"] = creds.token
+        with open(config.GOOGLE_TOKEN_FILE, "w") as f:
+            json.dump(token_data, f)
+
+    client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(config.GOOGLE_SHEETS_ID)
 
     # Get or create the Tracked Bets tab
