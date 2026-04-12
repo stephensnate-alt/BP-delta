@@ -51,6 +51,8 @@ MARKET_STAT_MAP = {
     "Home Runs": ("batter", "homeRuns"),
     "Doubles": ("batter", "doubles"),
     "2B": ("batter", "doubles"),
+    "Singles": ("batter", "singles"),
+    "1B": ("batter", "singles"),
     "Earned Runs": ("pitcher", "earnedRuns"),
 }
 
