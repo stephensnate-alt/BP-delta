@@ -331,3 +331,76 @@ def check_results(pending_bets):
             )
 
     return updates
+
+
+def check_live(pending_bets):
+    """
+    Check live/in-progress games for Over bets that have already hit.
+
+    Returns list of dicts with bet info and current stat for display.
+    """
+    hits = []
+    game_cache = {}
+
+    for row_num, bet in pending_bets:
+        # Only check Over bets
+        if bet["over_under"].upper() != "O":
+            continue
+
+        team = bet["team"]
+        game_date = bet["date"]
+        cache_key = (team, game_date)
+
+        if cache_key not in game_cache:
+            games = get_team_games(team, game_date)
+            game_cache[cache_key] = games
+
+        games = game_cache.get(cache_key, [])
+        if not games:
+            continue
+
+        game = games[0]
+        status = game.get("status", {}).get("detailedState", "")
+
+        if status == "Final":
+            continue  # already graded or will be by grade command
+
+        if "In Progress" not in status and "Live" not in status.lower():
+            continue
+
+        game_pk = game["gamePk"]
+        if game_pk not in game_cache:
+            game_cache[game_pk] = get_boxscore(game_pk)
+
+        boxscore = game_cache[game_pk]
+
+        mapping = MARKET_STAT_MAP.get(bet["market"])
+        if not mapping:
+            continue
+
+        player_type = mapping[0]
+        stats = _find_player_in_boxscore(boxscore, bet["player"], player_type)
+        if stats is None:
+            continue
+
+        actual = _get_stat_value(stats, bet["market"])
+        if actual is None:
+            continue
+
+        try:
+            line = float(bet["line"])
+        except (ValueError, TypeError):
+            continue
+
+        hit = actual > line
+        hits.append({
+            "player": bet["player"],
+            "market": bet["market"],
+            "line": line,
+            "actual": actual,
+            "hit": hit,
+            "team": bet["team"],
+            "status": status,
+        })
+
+    return hits

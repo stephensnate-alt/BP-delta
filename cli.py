@@ -23,7 +23,7 @@ from sheets import (
     get_bets_in_range,
     update_reports_tab,
 )
-from results import check_results, ResultsError
+from results import check_results, check_live, ResultsError
 
 
 def setup_logging(verbose):
@@ -86,6 +86,48 @@ def analyze(threshold, dry_run, no_headless):
 
     added = append_bets(bets)
     click.echo(f"{added} new bets written to Google Sheet.")
+
+
+# ─── LIVE (check in-progress games for Over hits) ───────────────
+
+
+@cli.command()
+def live():
+    """Check live games for Over bets that have already hit."""
+    click.echo("Checking live games...")
+
+    pending = get_pending_bets()
+    if not pending:
+        click.echo("No pending bets.")
+        return
+
+    overs = [(r, b) for r, b in pending if b["over_under"].upper() == "O"]
+    if not overs:
+        click.echo("No pending Over bets.")
+        return
+
+    click.echo(f"Checking {len(overs)} Over bets against live stats...\n")
+
+    try:
+        hits = check_live(pending)
+    except ResultsError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+    if not hits:
+        click.echo("No live games found for your bets.")
+        return
+
+    click.echo(f"{'Player':<20} {'Market':<18} {'Line':<6} {'Actual':<8} "
+               f"{'Status':<6} {'Team':<5}")
+    click.echo("-" * 70)
+    for h in hits:
+        status = "HIT!" if h["hit"] else "..."
+        click.echo(f"{h['player']:<20} {h['market']:<18} {h['line']:<6} "
+                   f"{h['actual']:<8} {status:<6} {h['team']:<5}")
+
+    hit_count = sum(1 for h in hits if h["hit"])
+    click.echo(f"\n{hit_count} of {len(hits)} Over bets have hit so far.")
 
 
 # ─── GRADE (check results + auto stock reports) ─────────────────
