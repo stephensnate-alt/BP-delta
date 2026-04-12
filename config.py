@@ -12,6 +12,7 @@ BP_PASSWORD = os.getenv("BP_PASSWORD", "")
 # Google Sheets
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID", "")
 GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
+GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
 TRACKED_BETS_TAB = "Tracked Bets"
 
 # Edge filtering

@@ -2,21 +2,16 @@
 Google Sheets integration for storing and retrieving tracked bets.
 
 Sheet layout ("Tracked Bets" tab):
-Date | Team | Player | Market | O/U | Line | Odds | CS% | Delta | BP | Delta% | Result | Profit
+Date | Team | Player | Market | O/U | Line | Odds | CS% | Delta | BP | Delta% | Exp Profit | Result | Actual Profit
 """
 
 import logging
+import os
 import gspread
-from google.oauth2.service_account import Credentials
 
 import config
 
 logger = logging.getLogger(__name__)
-
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
 
 HEADERS = [
     "Date", "Team", "Player", "Market", "O/U", "Line",
@@ -32,10 +27,11 @@ COL_PROFIT = 14
 
 def get_sheet():
     """Authenticate and return the Tracked Bets worksheet."""
-    creds = Credentials.from_service_account_file(
-        config.GOOGLE_CREDENTIALS_FILE, scopes=SCOPES
+    # Use OAuth2 flow (opens browser on first run, saves token for future runs)
+    client = gspread.oauth(
+        credentials_filename=config.GOOGLE_CREDENTIALS_FILE,
+        authorized_user_filename=config.GOOGLE_TOKEN_FILE,
     )
-    client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(config.GOOGLE_SHEETS_ID)
 
     # Get or create the Tracked Bets tab
