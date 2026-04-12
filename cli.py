@@ -21,6 +21,7 @@ from sheets import (
     batch_update_results,
     get_all_completed_bets,
     get_bets_in_range,
+    update_reports_tab,
 )
 from results import check_results, ResultsError
 
@@ -133,6 +134,11 @@ def grade(game_date):
 
     click.echo(f"\nGraded {len(updates)} bets: {wins}W-{losses}L-{pushes}P")
     click.echo(f"Session P/L: ${total_profit:+,.2f}")
+
+    # ── Update Reports tab in Google Sheet ──
+    click.echo("Updating Reports tab...")
+    update_reports_tab()
+    click.echo("Reports tab updated.")
 
     # ── Auto stock reports after grading ──
     _run_stock_reports()

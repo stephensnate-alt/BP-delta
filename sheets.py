@@ -234,3 +234,187 @@ def get_bets_in_range(start_date, end_date):
             in_range.append(bet)
 
     return in_range
+
+
+def _get_spreadsheet():
+    """Get the spreadsheet object (not just the worksheet)."""
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    import json
+
+    SCOPES = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+
+    with open(config.GOOGLE_TOKEN_FILE) as f:
+        token_data = json.load(f)
+
+    creds = Credentials(
+        token=token_data["token"],
+        refresh_token=token_data["refresh_token"],
+        token_uri=token_data["token_uri"],
+        client_id=token_data["client_id"],
+        client_secret=token_data["client_secret"],
+        scopes=SCOPES,
+    )
+
+    if creds.expired:
+        creds.refresh(Request())
+        token_data["token"] = creds.token
+        with open(config.GOOGLE_TOKEN_FILE, "w") as f:
+            json.dump(token_data, f)
+
+    client = gspread.authorize(creds)
+    return client.open_by_key(config.GOOGLE_SHEETS_ID)
+
+
+def _calc_stats(bets):
+    """Calculate stats for a list of completed bets."""
+    if not bets:
+        return None
+    wins = sum(1 for b in bets if b["result"] == "W")
+    losses = sum(1 for b in bets if b["result"] == "L")
+    pushes = sum(1 for b in bets if b["result"] == "P")
+    total = len(bets)
+    exp = 0
+    actual = 0
+    for b in bets:
+        try:
+            exp += float(b.get("exp_profit", 0))
+        except (ValueError, TypeError):
+            pass
+        try:
+            actual += float(b.get("profit", 0))
+        except (ValueError, TypeError):
+            pass
+    wagered = total * config.BET_SIZE
+    win_pct = (wins / (wins + losses) * 100) if (wins + losses) > 0 else 0
+    roi = (actual / wagered * 100) if wagered > 0 else 0
+    return {
+        "total": total, "wins": wins, "losses": losses, "pushes": pushes,
+        "win_pct": win_pct, "exp": exp, "actual": actual,
+        "diff": actual - exp, "wagered": wagered, "roi": roi,
+    }
+
+
+def update_reports_tab():
+    """Write reports to a 'Reports' tab in the Google Sheet."""
+    from datetime import date, timedelta
+
+    spreadsheet = _get_spreadsheet()
+
+    # Get or create Reports tab
+    try:
+        reports = spreadsheet.worksheet("Reports")
+        reports.clear()
+    except gspread.exceptions.WorksheetNotFound:
+        reports = spreadsheet.add_worksheet(title="Reports", rows=200, cols=10)
+
+    # Get all bets from Tracked Bets tab
+    tracked = spreadsheet.worksheet(config.TRACKED_BETS_TAB)
+    all_rows = tracked.get_all_values()
+    all_bets = [row_to_bet(row) for row in all_rows[1:]]
+    completed = [b for b in all_bets if b.get("result") in ("W", "L", "P")]
+
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    week_ago = today - timedelta(days=7)
+
+    today_bets = [b for b in completed if b["date"] == today.isoformat()]
+    yest_bets = [b for b in completed if b["date"] == yesterday.isoformat()]
+    week_bets = [b for b in completed if week_ago.isoformat() <= b["date"] <= today.isoformat()]
+
+    rows = []
+    rows.append([f"BP-Delta Reports - Updated {today.isoformat()}"])
+    rows.append([])
+
+    # Summary header
+    header = ["Period", "Bets", "Record", "Win%", "Wagered",
+              "Expected", "Actual", "vs Expected", "ROI"]
+    rows.append(header)
+
+    for label, bets in [
+        (f"Today ({today})", today_bets),
+        (f"Yesterday ({yesterday})", yest_bets),
+        ("Last 7 Days", week_bets),
+        ("All Time", completed),
+    ]:
+        s = _calc_stats(bets)
+        if s:
+            rows.append([
+                label, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
+                f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
+                f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
+            ])
+        else:
+            rows.append([label, 0, "0-0-0", "0%", "$0", "$0", "$0", "$0", "0%"])
+
+    # Edge bands
+    rows.append([])
+    rows.append(["EDGE BANDS"])
+    rows.append(["Band", "Bets", "Record", "Win%", "Wagered",
+                 "Expected", "Actual", "vs Expected", "ROI"])
+    for low, high, label in config.EDGE_BANDS:
+        band_bets = []
+        for b in completed:
+            try:
+                dpct = float(b["delta_pct"])
+            except (ValueError, TypeError):
+                continue
+            if low <= dpct <= high:
+                band_bets.append(b)
+        s = _calc_stats(band_bets)
+        if s:
+            rows.append([
+                label, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
+                f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
+                f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
+            ])
+
+    # Market breakdown
+    rows.append([])
+    rows.append(["BY MARKET"])
+    rows.append(["Market", "Bets", "Record", "Win%", "Wagered",
+                 "Expected", "Actual", "vs Expected", "ROI"])
+    markets = {}
+    for b in completed:
+        m = b.get("market", "Unknown")
+        if m not in markets:
+            markets[m] = []
+        markets[m].append(b)
+    for market, mbets in sorted(markets.items()):
+        s = _calc_stats(mbets)
+        if s:
+            rows.append([
+                market, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
+                f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
+                f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
+            ])
+
+    # By date
+    rows.append([])
+    rows.append(["BY DATE"])
+    rows.append(["Date", "Bets", "Record", "Win%", "Wagered",
+                 "Expected", "Actual", "vs Expected", "ROI"])
+    dates = {}
+    for b in completed:
+        d = b["date"]
+        if d not in dates:
+            dates[d] = []
+        dates[d].append(b)
+    for d, dbets in sorted(dates.items(), reverse=True):
+        s = _calc_stats(dbets)
+        if s:
+            rows.append([
+                d, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
+                f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
+                f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
+            ])
+
+    reports.update(f"A1:I{len(rows)}", rows, value_input_option="USER_ENTERED")
+    logger.info("Reports tab updated.")
