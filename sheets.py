@@ -385,7 +385,7 @@ def update_reports_tab():
         s = _calc_stats(bets)
         if s:
             rows.append([
-                label, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                label, s["total"], f"'{s['wins']}-{s['losses']}-{s['pushes']}",
                 f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
                 f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
                 f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
@@ -410,7 +410,7 @@ def update_reports_tab():
         s = _calc_stats(band_bets)
         if s:
             rows.append([
-                label, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                label, s["total"], f"'{s['wins']}-{s['losses']}-{s['pushes']}",
                 f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
                 f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
                 f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
@@ -431,7 +431,7 @@ def update_reports_tab():
         s = _calc_stats(mbets)
         if s:
             rows.append([
-                market, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                market, s["total"], f"'{s['wins']}-{s['losses']}-{s['pushes']}",
                 f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
                 f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
                 f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
@@ -452,7 +452,7 @@ def update_reports_tab():
         s = _calc_stats(odds_bets)
         if s:
             rows.append([
-                label, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                label, s["total"], f"'{s['wins']}-{s['losses']}-{s['pushes']}",
                 f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
                 f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
                 f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
@@ -473,7 +473,7 @@ def update_reports_tab():
         s = _calc_stats(dbets)
         if s:
             rows.append([
-                d, s["total"], f"{s['wins']}-{s['losses']}-{s['pushes']}",
+                d, s["total"], f"'{s['wins']}-{s['losses']}-{s['pushes']}",
                 f"{s['win_pct']:.1f}%", f"${s['wagered']:,.2f}",
                 f"${s['exp']:+,.2f}", f"${s['actual']:+,.2f}",
                 f"${s['diff']:+,.2f}", f"{s['roi']:+.1f}%",
