@@ -208,6 +208,41 @@ def batch_update_results(updates):
     logger.info(f"Updated results for {len(updates)} bets.")
 
 
+def recalc_expected_profit():
+    """Recalculate expected profit for all existing bets in the sheet."""
+    worksheet = get_sheet()
+    all_rows = worksheet.get_all_values()
+
+    cells = []
+    for i, row in enumerate(all_rows[1:], start=2):
+        bet = row_to_bet(row)
+        try:
+            odds = int(bet["odds"])
+            delta_pct = float(bet["delta_pct"])
+        except (ValueError, TypeError):
+            continue
+
+        if odds < 0:
+            p_implied = abs(odds) / (abs(odds) + 100)
+            win_amount = config.BET_SIZE * (100 / abs(odds))
+        else:
+            p_implied = 100 / (odds + 100)
+            win_amount = config.BET_SIZE * (odds / 100)
+
+        p_true = p_implied + (delta_pct / 100)
+        if p_true > 1:
+            p_true = 0.99
+
+        exp_profit = round(p_true * win_amount - (1 - p_true) * config.BET_SIZE, 2)
+        cells.append(gspread.Cell(i, COL_EXP_PROFIT, f"{exp_profit:.2f}"))
+
+    if cells:
+        worksheet.update_cells(cells)
+        logger.info(f"Recalculated expected profit for {len(cells)} bets.")
+
+    return len(cells)
+
+
 def get_all_completed_bets():
     """Get all bets that have a result (W, L, or P)."""
     worksheet = get_sheet()

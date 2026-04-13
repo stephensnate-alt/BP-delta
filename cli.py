@@ -22,6 +22,7 @@ from sheets import (
     get_all_completed_bets,
     get_bets_in_range,
     update_reports_tab,
+    recalc_expected_profit,
 )
 from results import check_results, check_live, ResultsError
 
@@ -86,6 +87,17 @@ def analyze(threshold, dry_run, no_headless):
 
     added = append_bets(bets)
     click.echo(f"{added} new bets written to Google Sheet.")
+
+
+# ─── FIX-EV (recalculate expected profit) ────────────────────────
+
+
+@cli.command("fix-ev")
+def fix_ev():
+    """Recalculate expected profit for all bets in the sheet."""
+    click.echo("Recalculating expected profit for all bets...")
+    count = recalc_expected_profit()
+    click.echo(f"Updated {count} bets.")
 
 
 # ─── LIVE (check in-progress games for Over hits) ───────────────
