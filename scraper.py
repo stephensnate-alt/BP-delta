@@ -121,9 +121,22 @@ def parse_positive_ev(page, edge_threshold=None):
             logger.warning(f"Could not parse line: {line_str!r}")
             continue
 
-        # Calculate expected profit from the edge
-        # EV = edge% * bet_size (e.g., 17.5% edge on $100 = $17.50)
-        exp_profit = round(delta_pct / 100 * config.BET_SIZE, 2)
+        # Calculate expected profit using true probability and odds
+        # 1. Get implied probability from the odds
+        if odds < 0:
+            p_implied = abs(odds) / (abs(odds) + 100)
+            win_amount = config.BET_SIZE * (100 / abs(odds))
+        else:
+            p_implied = 100 / (odds + 100)
+            win_amount = config.BET_SIZE * (odds / 100)
+
+        # 2. True probability = implied + delta edge
+        p_true = p_implied + (delta_pct / 100)
+        if p_true > 1:
+            p_true = 0.99
+
+        # 3. EV = (true prob * win) - (1 - true prob) * stake
+        exp_profit = round(p_true * win_amount - (1 - p_true) * config.BET_SIZE, 2)
 
         bet = {
             "date": today,
