@@ -333,10 +333,12 @@ def check_results(pending_bets):
         # Find player stats in boxscore
         stats = _find_player_in_boxscore(boxscore, bet["player"], player_type)
         if stats is None:
-            logger.warning(
-                f"Could not find {bet['player']} in boxscore for "
-                f"{team} on {game_date}"
+            # Game is final but player not found in stats - they didn't play
+            # Mark as VOID (bet is voided, no profit/loss)
+            logger.info(
+                f"{bet['player']} did not play for {team} on {game_date} - VOID"
             )
+            updates.append((row_num, "VOID", 0.0))
             continue
 
         result, profit = grade_bet(bet, stats)
