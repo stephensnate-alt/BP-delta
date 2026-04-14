@@ -6,6 +6,7 @@ load_dotenv()
 # Ballpark Pal
 BP_LOGIN_URL = "https://www.ballparkpal.com/login.php"
 BP_POSITIVE_EV_URL = "https://www.ballparkpal.com/Positive-EV.php"
+BP_ODDS_URL = "https://www.ballparkpal.com/OddsScreen.php"
 BP_EMAIL = os.getenv("BP_EMAIL", "")
 BP_PASSWORD = os.getenv("BP_PASSWORD", "")
 
@@ -14,6 +15,10 @@ GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID", "")
 GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
 GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
 TRACKED_BETS_TAB = "Tracked Bets"
+
+# All Bets (odds screen) - separate Google Sheet
+ALL_BETS_SHEET_ID = os.getenv("ALL_BETS_SHEET_ID", "")
+ALL_BETS_TAB = "All Bets"
 
 # Edge filtering
 EDGE_THRESHOLD = float(os.getenv("EDGE_THRESHOLD", "5.0"))
