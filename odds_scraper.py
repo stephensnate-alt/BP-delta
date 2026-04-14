@@ -28,6 +28,7 @@ MARKETS = [
     "Batter RBIs",
     "Batter Stolen Bases",
     "Batter Total Bases",
+    "Batter Hits+Runs+RBIs",
     "Pitcher Strikeouts",
     "Pitcher Outs",
     "Pitcher Walks",
