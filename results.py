@@ -41,6 +41,7 @@ MARKET_STAT_MAP = {
     "Pitcher Strikeouts": ("pitcher", "strikeOuts"),
     "Batter Strikeouts": ("batter", "strikeOuts"),
     "Batter Ks": ("batter", "strikeOuts"),
+    "Batting Strikeouts": ("batter", "strikeOuts"),
     "Outs": ("pitcher", "outs"),
     "Pitcher Outs": ("pitcher", "outs"),
     "Hits Allowed": ("pitcher", "hits"),
