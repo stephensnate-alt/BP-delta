@@ -109,8 +109,13 @@ def _normalize_player_name(name):
 
     BP uses abbreviated first names like "E. Fedde" while the MLB API
     uses full names like "Emmanuel Clase" or sometimes "E. Fedde".
-    We match on last name + first initial.
+    Strips accents and matches on last name + first initial.
     """
+    import unicodedata
+    # Strip accents (é -> e, á -> a, ñ -> n, etc.)
+    name = unicodedata.normalize("NFD", name)
+    name = "".join(c for c in name if unicodedata.category(c) != "Mn")
+
     parts = name.strip().split()
     if len(parts) < 2:
         return name.lower().strip()
@@ -142,7 +147,17 @@ def _find_player_in_boxscore(boxscore, player_name, player_type):
             full_name = player_data.get("person", {}).get("fullName", "")
             normalized = _normalize_player_name(full_name)
 
-            if normalized == target or full_name.lower().endswith(target[1] if isinstance(target, tuple) else target):
+            # Match on first initial + last name
+            matched = False
+            if isinstance(target, tuple) and isinstance(normalized, tuple):
+                if target == normalized:
+                    matched = True
+                elif target[1] == normalized[1]:
+                    # Same last name, check first initial
+                    if target[0] == normalized[0]:
+                        matched = True
+
+            if matched:
                 stats = player_data.get("stats", {})
 
                 if player_type == "pitcher":
