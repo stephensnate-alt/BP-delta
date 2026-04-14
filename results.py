@@ -58,7 +58,9 @@ MARKET_STAT_MAP = {
     "Total Bases": ("batter", "totalBases"),
     "Hits + Runs + RBIs": ("batter", "hits+runs+rbi"),  # composite
     "Batter Hits+Runs+RBIs": ("batter", "hits+runs+rbi"),
+    "Batter H+R+RBI": ("batter", "hits+runs+rbi"),
     "H+R+RBI": ("batter", "hits+runs+rbi"),
+    "Pitcher To Record Win": ("pitcher", "win"),
     "Hits": ("batter", "hits"),
     "Batter Hits": ("batter", "hits"),
     "Runs": ("batter", "runs"),

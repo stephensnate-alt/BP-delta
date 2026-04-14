@@ -16,25 +16,24 @@ logger = logging.getLogger(__name__)
 
 # All market options in the dropdown
 MARKETS = [
-    "Batter Home Runs",
-    "Runs First Inning",
-    "Team Total Runs",
+    "Batter Singles",
     "Batter Doubles",
     "Batter Triples",
-    "Batter Hits",
-    "Batter Singles",
+    "Batter Home Runs",
     "Batter Strikeouts",
     "Batter Walks",
-    "Batter Runs",
-    "Batter RBIs",
-    "Batter Stolen Bases",
+    "Batter Hits",
     "Batter Bases",
-    "Batter Hits+Runs+RBIs",
-    "Pitcher Strikeouts",
-    "Pitcher Outs",
+    "Batter Stolen Bases",
+    "Batter RBIs",
+    "Batter Runs",
+    "Batter H+R+RBI",
     "Pitcher Walks",
-    "Pitcher Hits Allowed",
+    "Pitcher Strikeouts",
     "Pitcher Earned Runs",
+    "Pitcher To Record Win",
+    "Pitcher Hits Allowed",
+    "Pitcher Outs",
 ]
 
 # Sportsbook columns (0-based index in the table, after TM, PLAYER, LINE, BP)
