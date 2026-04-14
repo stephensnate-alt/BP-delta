@@ -22,6 +22,7 @@ MARKETS = [
     "Batter Doubles",
     "Batter Triples",
     "Batter Hits",
+    "Batter Singles",
     "Batter Strikeouts",
     "Batter Walks",
     "Batter Runs",
