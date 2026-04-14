@@ -309,7 +309,7 @@ def check_results(pending_bets):
         game = games[0]
         status = game.get("status", {}).get("detailedState", "")
 
-        if status != "Final":
+        if status not in ("Final", "Game Over", "Completed Early"):
             logger.info(f"Game {team} on {game_date} not final yet: {status}")
             continue
 
