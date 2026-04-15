@@ -107,11 +107,23 @@ def _click_button(page, label):
 
 
 def _scrape_table(page):
-    """Read entire table in one JS call. Returns list of row arrays."""
+    """Read the correct data table (the one with a BP header column)."""
     return page.evaluate("""() => {
-        const table = document.querySelector('table');
-        if (!table) return [];
-        const rows = table.querySelectorAll('tbody tr');
+        // Find the table that has 'BP' in its header row
+        const tables = document.querySelectorAll('table');
+        let dataTable = null;
+        for (const table of tables) {
+            const ths = table.querySelectorAll('th');
+            for (const th of ths) {
+                if (th.textContent.trim() === 'BP') {
+                    dataTable = table;
+                    break;
+                }
+            }
+            if (dataTable) break;
+        }
+        if (!dataTable) return [];
+        const rows = dataTable.querySelectorAll('tbody tr');
         const result = [];
         for (const row of rows) {
             const cells = row.querySelectorAll('td');
