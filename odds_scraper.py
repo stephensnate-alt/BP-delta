@@ -260,38 +260,53 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
             for i, market in enumerate(MARKETS):
                 logger.info(f"[{i+1}/{len(MARKETS)}] {market}")
 
-                # Select market (fresh dropdown query each time)
-                if not _select_market(page, market):
+                try:
+                    # Select market (fresh dropdown query each time)
+                    if not _select_market(page, market):
+                        continue
+
+                    # Page may fully reload here - wait for it
+                    _wait_and_settle(page)
+                    try:
+                        page.wait_for_selector("table", timeout=10000, state="visible")
+                    except Exception:
+                        logger.info(f"  No table for {market}, skipping")
+                        continue
+
+                    # Re-detect columns after first market
+                    if i == 0:
+                        page.screenshot(path="debug_first_market.png")
+                        new_map = _detect_columns(page)
+                        if new_map:
+                            col_map = new_map
+
+                    # ── OVER ──
+                    _click_button(page, "Over")
+                    _wait_and_settle(page)
+
+                    rows = _scrape_table(page)
+                    if rows:
+                        over_bets = _parse_bets(rows, col_map, market, "O", threshold, today)
+                        logger.info(f"  Over: {len(rows)} rows, {len(over_bets)} bets")
+                        all_bets.extend(over_bets)
+                    else:
+                        logger.info(f"  Over: no data")
+
+                    # ── UNDER ──
+                    _click_button(page, "Under")
+                    _wait_and_settle(page)
+
+                    rows = _scrape_table(page)
+                    if rows:
+                        under_bets = _parse_bets(rows, col_map, market, "U", threshold, today)
+                        logger.info(f"  Under: {len(rows)} rows, {len(under_bets)} bets")
+                        all_bets.extend(under_bets)
+                    else:
+                        logger.info(f"  Under: no data")
+
+                except Exception as e:
+                    logger.warning(f"  Error on {market}, skipping: {e}")
                     continue
-
-                # Page may fully reload here - wait for it
-                _wait_and_settle(page)
-                page.wait_for_selector("table", timeout=15000, state="visible")
-
-                # Re-detect columns after first market (Expanded may have changed layout)
-                if i == 0:
-                    page.screenshot(path="debug_first_market.png")
-                    new_map = _detect_columns(page)
-                    if new_map:
-                        col_map = new_map
-
-                # ── OVER ──
-                _click_button(page, "Over")
-                _wait_and_settle(page)
-
-                rows = _scrape_table(page)
-                over_bets = _parse_bets(rows, col_map, market, "O", threshold, today)
-                logger.info(f"  Over: {len(rows)} rows, {len(over_bets)} bets")
-                all_bets.extend(over_bets)
-
-                # ── UNDER ──
-                _click_button(page, "Under")
-                _wait_and_settle(page)
-
-                rows = _scrape_table(page)
-                under_bets = _parse_bets(rows, col_map, market, "U", threshold, today)
-                logger.info(f"  Under: {len(rows)} rows, {len(under_bets)} bets")
-                all_bets.extend(under_bets)
 
             logger.info(f"DONE: {len(all_bets)} total bets with delta >= {threshold}%")
             return all_bets
