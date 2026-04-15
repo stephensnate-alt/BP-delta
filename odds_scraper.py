@@ -273,12 +273,17 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
                         logger.info(f"  No table for {market}, skipping")
                         continue
 
-                    # Re-detect columns after first market
+                    # Page reload resets to Default view - click Expanded again
+                    _click_button(page, "Expanded")
+                    _wait_and_settle(page)
+
+                    # Re-detect columns (layout may differ per market/view)
+                    new_map = _detect_columns(page)
+                    if new_map:
+                        col_map = new_map
+
                     if i == 0:
                         page.screenshot(path="debug_first_market.png")
-                        new_map = _detect_columns(page)
-                        if new_map:
-                            col_map = new_map
 
                     # ── OVER ──
                     _click_button(page, "Over")
