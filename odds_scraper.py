@@ -107,28 +107,22 @@ def _click_button(page, label):
 
 
 def _scrape_table(page):
-    """Read the correct data table (the one with a BP header column)."""
+    """Read only VISIBLE cells from the table (hidden columns are in DOM but invisible)."""
     return page.evaluate("""() => {
-        // Find the table that has 'BP' in its header row
-        const tables = document.querySelectorAll('table');
-        let dataTable = null;
-        for (const table of tables) {
-            const ths = table.querySelectorAll('th');
-            for (const th of ths) {
-                if (th.textContent.trim() === 'BP') {
-                    dataTable = table;
-                    break;
-                }
-            }
-            if (dataTable) break;
-        }
-        if (!dataTable) return [];
-        const rows = dataTable.querySelectorAll('tbody tr');
+        const table = document.querySelector('table');
+        if (!table) return [];
+        const rows = table.querySelectorAll('tbody tr');
         const result = [];
         for (const row of rows) {
             const cells = row.querySelectorAll('td');
-            if (cells.length >= 4) {
-                result.push(Array.from(cells).map(c => c.textContent.trim()));
+            const visible = [];
+            for (const c of cells) {
+                if (c.offsetWidth > 0 && c.offsetHeight > 0) {
+                    visible.push(c.textContent.trim());
+                }
+            }
+            if (visible.length >= 4) {
+                result.push(visible);
             }
         }
         return result;
