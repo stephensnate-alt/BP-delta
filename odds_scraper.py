@@ -52,33 +52,23 @@ def _odds_to_implied_prob(odds):
 
 
 def _calc_delta_pct(bp_odds, book_odds):
-    """
-    Calculate the delta% between BP's odds and a sportsbook's odds.
-
-    Delta = BP implied probability - book implied probability.
-    A positive delta means BP thinks the event is more likely than the book.
-    """
     bp_prob = _odds_to_implied_prob(bp_odds)
     book_prob = _odds_to_implied_prob(book_odds)
     return round((bp_prob - book_prob) * 100, 1)
 
 
 def _calc_expected_profit(bp_odds, book_odds):
-    """Calculate expected profit using BP's true probability and the book's odds."""
     p_true = _odds_to_implied_prob(bp_odds)
-
     if book_odds < 0:
         win_amount = config.BET_SIZE * (100 / abs(book_odds))
     else:
         win_amount = config.BET_SIZE * (book_odds / 100)
-
     return round(p_true * win_amount - (1 - p_true) * config.BET_SIZE, 2)
 
 
 def _parse_odds_cell(text):
-    """Parse an odds value from a table cell. Returns int or None."""
     text = text.strip()
-    if not text or text == "-" or text == "":
+    if not text or text == "-":
         return None
     try:
         return int(text)
@@ -86,60 +76,77 @@ def _parse_odds_cell(text):
         return None
 
 
-def _find_market_dropdown(page):
-    """Find the market dropdown specifically (the one containing 'Batter Home Runs')."""
-    selects = page.query_selector_all("select")
-    for s in selects:
-        options_text = s.inner_text()
-        if "Batter Home Runs" in options_text or "Batter Hits" in options_text:
-            logger.debug("Found market dropdown")
-            return s
-    # Fallback: if only one select, use it
-    if len(selects) == 1:
-        return selects[0]
-    logger.error(f"Could not identify market dropdown among {len(selects)} selects")
-    return None
+def _select_market(page, market):
+    """
+    Select a market from the dropdown using JavaScript to avoid stale elements.
+    Finds the <select> that contains the market options, sets its value, and
+    dispatches a change event so the page reacts.
+    """
+    result = page.evaluate("""(marketLabel) => {
+        const selects = document.querySelectorAll('select');
+        for (const sel of selects) {
+            for (const opt of sel.options) {
+                if (opt.text === marketLabel || opt.label === marketLabel) {
+                    sel.value = opt.value;
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    return { found: true, value: opt.value };
+                }
+            }
+        }
+        return { found: false };
+    }""", market)
+
+    if not result["found"]:
+        logger.warning(f"Could not find '{market}' in any dropdown")
+        return False
+
+    logger.debug(f"Selected market: {market}")
+    return True
 
 
 def _click_over_under(page, target):
-    """Click the Over or Under button specifically."""
-    try:
-        # Target the exact button - BP uses styled buttons/links for Over/Under
-        btn = page.locator(f"button:text-is('{target}'), a:text-is('{target}')").first
-        btn.click(timeout=3000)
-        logger.debug(f"Clicked '{target}' button")
-        return True
-    except Exception:
-        pass
-    try:
-        # Fallback: try any clickable element with exact text
-        btn = page.locator(f"text='{target}'").first
-        btn.click(timeout=3000)
-        logger.debug(f"Clicked '{target}' via text fallback")
-        return True
-    except Exception:
+    """
+    Click Over or Under button using JavaScript to find the exact button.
+    Looks for elements whose trimmed text is exactly 'Over' or 'Under'.
+    """
+    clicked = page.evaluate("""(target) => {
+        // Look through clickable elements for exact text match
+        const candidates = document.querySelectorAll('button, a, span, div, label');
+        for (const el of candidates) {
+            // Only match if the element's own text (not children's combined text) matches
+            // or if it's a small element with exact text
+            const text = el.textContent.trim();
+            if (text === target) {
+                const rect = el.getBoundingClientRect();
+                // Must be visible and reasonably sized (a button, not a table cell)
+                if (rect.width > 0 && rect.width < 200 && rect.height > 0 && rect.height < 80) {
+                    el.click();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }""", target)
+
+    if clicked:
+        logger.debug(f"Clicked '{target}'")
+    else:
         logger.warning(f"Could not find '{target}' button")
-        return False
-
-
-def _get_first_player(page):
-    """Get the first player name from the table for change detection."""
-    rows = page.query_selector_all("table tbody tr, table tr")
-    for row in rows:
-        cells = row.query_selector_all("td")
-        if len(cells) >= 4:
-            return cells[1].inner_text().strip()
-    return ""
+    return clicked
 
 
 def _detect_columns(page):
-    """Detect column layout from table headers."""
-    headers = page.query_selector_all("table th, table thead td")
-    header_texts = [h.inner_text().strip().upper() for h in headers]
-    logger.debug(f"Table headers: {header_texts}")
+    """Read table headers to build a column index map."""
+    headers = page.evaluate("""() => {
+        const ths = document.querySelectorAll('table th');
+        return Array.from(ths).map(th => th.textContent.trim().toUpperCase());
+    }""")
+
+    logger.debug(f"Table headers: {headers}")
 
     col_map = {}
-    for i, h in enumerate(header_texts):
+    book_names = {"DK", "FD", "NV", "KA", "PM", "PX"}
+    for i, h in enumerate(headers):
         if h == "TM":
             col_map["team"] = i
         elif h == "PLAYER":
@@ -148,61 +155,50 @@ def _detect_columns(page):
             col_map["line"] = i
         elif h == "BP":
             col_map["bp"] = i
-        elif h == "DK":
-            col_map["DK"] = i
-        elif h == "FD":
-            col_map["FD"] = i
-        elif h == "NV":
-            col_map["NV"] = i
-        elif h == "KA":
-            col_map["KA"] = i
-        elif h == "PM":
-            col_map["PM"] = i
-        elif h == "PX":
-            col_map["PX"] = i
+        elif h in book_names:
+            col_map[h] = i
 
     if "bp" not in col_map:
-        logger.error(f"Could not find BP column in headers: {header_texts}")
+        logger.error(f"Could not find BP column. Headers: {headers}")
         return None
 
-    logger.info(f"Detected columns: {col_map}")
+    logger.info(f"Column map: {col_map}")
     return col_map
 
 
-def _wait_for_table_change(page, old_first_player, timeout=10):
-    """Wait until the first player in the table changes (or timeout)."""
-    for _ in range(timeout * 2):
-        new_first = _get_first_player(page)
-        if new_first and new_first != old_first_player:
-            return True
-        time.sleep(0.5)
-    return False
+def _scrape_table(page, col_map):
+    """
+    Read all table data using JavaScript for speed.
+    Returns list of lists (each inner list = one row's cell texts).
+    """
+    rows = page.evaluate("""() => {
+        const table = document.querySelector('table');
+        if (!table) return [];
+        const rows = table.querySelectorAll('tbody tr');
+        const result = [];
+        for (const row of rows) {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 4) {
+                result.push(Array.from(cells).map(c => c.textContent.trim()));
+            }
+        }
+        return result;
+    }""")
+    return rows
 
 
-def _parse_table_bets(page, col_map, market, over_under, threshold, today):
-    """Parse visible table rows and return qualifying bets."""
+def _parse_bets_from_rows(rows, col_map, market, over_under, threshold, today):
+    """Parse rows into qualifying bets."""
     bets = []
-    rows = page.query_selector_all("table tbody tr, table tr")
-    data_rows = []
-    for r in rows:
-        cells = r.query_selector_all("td")
-        if len(cells) >= 4:
-            data_rows.append(r)
+    for text in rows:
+        team = text[col_map["team"]] if "team" in col_map and col_map["team"] < len(text) else ""
+        player = text[col_map["player"]] if "player" in col_map and col_map["player"] < len(text) else ""
 
-    logger.info(f"  {over_under}: Found {len(data_rows)} data rows")
-
-    for row in data_rows:
-        cells = row.query_selector_all("td")
-        text = [c.inner_text().strip() for c in cells]
-
-        team = text[col_map["team"]] if "team" in col_map else ""
-        player = text[col_map["player"]] if "player" in col_map else ""
-
-        line_idx = col_map.get("line")
         bp_idx = col_map.get("bp")
-        if line_idx is None or bp_idx is None:
+        line_idx = col_map.get("line")
+        if bp_idx is None or line_idx is None:
             continue
-        if line_idx >= len(text) or bp_idx >= len(text):
+        if bp_idx >= len(text) or line_idx >= len(text):
             continue
 
         bp_odds = _parse_odds_cell(text[bp_idx])
@@ -247,12 +243,6 @@ def _parse_table_bets(page, col_map, market, over_under, threshold, today):
 
 
 def scrape_odds_screen(edge_threshold=None, headless=True):
-    """
-    Scrape the Odds Screen, cycling through all markets.
-
-    Compares BP odds to each of the 6 sportsbooks.
-    Returns bets where delta% >= threshold.
-    """
     threshold = edge_threshold if edge_threshold is not None else config.EDGE_THRESHOLD
     today = date.today().isoformat()
     all_bets = []
@@ -262,103 +252,85 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
         page = browser.new_page()
 
         try:
-            # Login
             from scraper import login
             login(page)
 
-            # Navigate to Odds Screen
             logger.info("Navigating to Odds Screen...")
             page.goto(config.BP_ODDS_URL, wait_until="networkidle", timeout=30000)
 
-            # Check if we got redirected to login
             if "login" in page.url.lower():
-                logger.warning("Redirected to login - retrying login...")
+                logger.warning("Redirected to login - retrying...")
                 login(page)
                 page.goto(config.BP_ODDS_URL, wait_until="networkidle", timeout=30000)
 
-            # Take a debug screenshot
             page.screenshot(path="debug_odds_screen.png")
             logger.info(f"Page URL: {page.url}")
-            logger.info(f"Page title: {page.title()}")
 
-            # Wait for table to appear
+            # Wait for table
             page.wait_for_selector("table", timeout=30000, state="visible")
             time.sleep(2)
 
-            # Click "Expanded" view to get all book columns
+            # Click Expanded view
             try:
-                expanded_btn = page.locator("button:has-text('Expanded'), a:has-text('Expanded'), span:has-text('Expanded')")
-                if expanded_btn.count() > 0:
-                    expanded_btn.first.click()
-                    time.sleep(3)
-                    logger.info("Clicked Expanded view")
-                else:
-                    # Try clicking by exact text
-                    page.click("text=Expanded", timeout=5000)
-                    time.sleep(3)
+                _click_over_under(page, "Expanded")  # reuse the JS click helper
+                time.sleep(2)
+                page.wait_for_load_state("networkidle", timeout=10000)
+                logger.info("Clicked Expanded view")
             except Exception as e:
                 logger.warning(f"Could not click Expanded: {e}")
 
-            # Detect column layout from headers
+            # Detect column layout
             col_map = _detect_columns(page)
             if not col_map:
                 page.screenshot(path="debug_odds_columns.png")
                 raise ScraperError("Could not detect table columns")
 
-            # Find the market dropdown
-            market_dropdown = _find_market_dropdown(page)
-            if not market_dropdown:
-                page.screenshot(path="debug_odds_dropdown.png")
-                raise ScraperError("Could not find market dropdown")
-
             for i, market in enumerate(MARKETS):
-                logger.info(f"Scraping market: {market}")
+                logger.info(f"Scraping market: {market} ({i+1}/{len(MARKETS)})")
 
-                # Select the market
-                try:
-                    market_dropdown.select_option(label=market)
-                except Exception as e:
-                    logger.warning(f"Could not select '{market}': {e}")
+                # Select market via JS (never stale)
+                if not _select_market(page, market):
                     continue
 
-                time.sleep(2)
+                time.sleep(1.5)
                 page.wait_for_load_state("networkidle", timeout=10000)
 
-                # First market: take debug screenshot and detect columns
+                # First market: re-detect columns and screenshot
                 if i == 0:
                     page.screenshot(path="debug_first_market.png")
                     new_col_map = _detect_columns(page)
                     if new_col_map:
                         col_map = new_col_map
 
-                # Make sure we're on Over
+                # ── OVER ──
                 _click_over_under(page, "Over")
                 time.sleep(1)
+                page.wait_for_load_state("networkidle", timeout=10000)
 
-                # Parse Over bets
-                all_bets.extend(_parse_table_bets(page, col_map, market, "O", threshold, today))
+                rows = _scrape_table(page, col_map)
+                over_bets = _parse_bets_from_rows(rows, col_map, market, "O", threshold, today)
+                logger.info(f"  O: {len(rows)} rows, {len(over_bets)} qualifying bets")
+                all_bets.extend(over_bets)
 
-                # Switch to Under
+                # ── UNDER ──
                 if _click_over_under(page, "Under"):
-                    time.sleep(1.5)
+                    time.sleep(1)
                     page.wait_for_load_state("networkidle", timeout=10000)
 
-                    all_bets.extend(_parse_table_bets(page, col_map, market, "U", threshold, today))
-
-                    # Switch back to Over for next market
-                    _click_over_under(page, "Over")
-                    time.sleep(0.5)
+                    rows = _scrape_table(page, col_map)
+                    under_bets = _parse_bets_from_rows(rows, col_map, market, "U", threshold, today)
+                    logger.info(f"  U: {len(rows)} rows, {len(under_bets)} qualifying bets")
+                    all_bets.extend(under_bets)
                 else:
-                    logger.warning(f"Could not switch to Under for {market}")
+                    logger.warning(f"  Could not switch to Under for {market}")
 
-            logger.info(f"Found {len(all_bets)} bets with delta% >= {threshold}% across all books.")
+            logger.info(f"Total: {len(all_bets)} bets with delta% >= {threshold}%")
             return all_bets
 
         except Exception as e:
             logger.exception(f"Odds screen scraping failed: {e}")
             try:
                 page.screenshot(path="debug_odds_error.png")
-                logger.info("Error screenshot saved to debug_odds_error.png")
             except Exception:
                 pass
             raise
