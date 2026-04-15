@@ -118,7 +118,7 @@ def _scrape_table(page):
             const visible = [];
             for (const c of cells) {
                 if (c.offsetWidth > 0 && c.offsetHeight > 0) {
-                    visible.push(c.textContent.trim());
+                    visible.push(c.innerText.trim());
                 }
             }
             if (visible.length >= 4) {
