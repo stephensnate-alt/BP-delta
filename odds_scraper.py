@@ -123,14 +123,35 @@ def _scrape_table(page):
     }""")
 
 
-def _parse_bets(rows, market, over_under, threshold, today):
+def _parse_bets(rows, market, over_under, threshold, today, debug_count=3):
     """Extract qualifying bets using fixed Expanded column indices."""
     bets = []
+    logged = 0
     for text in rows:
         if len(text) < COL_BOOKS_START + 1:
             continue
 
         bp_odds = _parse_odds_cell(text[COL_BP])
+
+        # Debug: show raw data for first few rows
+        if logged < debug_count:
+            logger.info(f"    RAW ROW: cols={len(text)} | "
+                        f"[0]={text[0]} [1]={text[1]} [2]={text[2]} "
+                        f"[3]={text[3]} [4]={text[4] if len(text)>4 else 'N/A'} "
+                        f"[5]={text[5] if len(text)>5 else 'N/A'} "
+                        f"[6]={text[6] if len(text)>6 else 'N/A'}")
+            if bp_odds is not None and len(text) > COL_BOOKS_START:
+                dk_text = text[COL_BOOKS_START] if COL_BOOKS_START < len(text) else "N/A"
+                dk_odds = _parse_odds_cell(dk_text)
+                if dk_odds is not None:
+                    delta = _calc_delta_pct(bp_odds, dk_odds)
+                    bp_prob = _odds_to_implied_prob(bp_odds)
+                    dk_prob = _odds_to_implied_prob(dk_odds)
+                    logger.info(f"    CALC: BP={bp_odds} ({bp_prob:.1%}) DK={dk_odds} ({dk_prob:.1%}) delta={delta}%")
+                else:
+                    logger.info(f"    CALC: BP={bp_odds}, DK text='{dk_text}' (unparseable)")
+            logged += 1
+
         if bp_odds is None:
             continue
 
