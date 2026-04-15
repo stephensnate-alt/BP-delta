@@ -103,21 +103,23 @@ def _find_market_dropdown(page):
 
 def _click_over_under(page, target):
     """Click the Over or Under button specifically."""
-    # Look for buttons/links that are the Over/Under toggle
-    # These are styled buttons in the header area, not random text on the page
-    buttons = page.query_selector_all("button, a, span, div")
-    for btn in buttons:
-        text = btn.inner_text().strip()
-        # Exact match only - avoid matching "Overland" or "Underwood" etc
-        if text == target:
-            # Check it looks like a toggle button (small element, not a table cell)
-            box = btn.bounding_box()
-            if box and box["width"] < 200 and box["height"] < 60:
-                btn.click()
-                logger.debug(f"Clicked '{target}' button")
-                return True
-    logger.warning(f"Could not find '{target}' button")
-    return False
+    try:
+        # Target the exact button - BP uses styled buttons/links for Over/Under
+        btn = page.locator(f"button:text-is('{target}'), a:text-is('{target}')").first
+        btn.click(timeout=3000)
+        logger.debug(f"Clicked '{target}' button")
+        return True
+    except Exception:
+        pass
+    try:
+        # Fallback: try any clickable element with exact text
+        btn = page.locator(f"text='{target}'").first
+        btn.click(timeout=3000)
+        logger.debug(f"Clicked '{target}' via text fallback")
+        return True
+    except Exception:
+        logger.warning(f"Could not find '{target}' button")
+        return False
 
 
 def _get_first_player(page):
@@ -309,11 +311,8 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
                 page.screenshot(path="debug_odds_dropdown.png")
                 raise ScraperError("Could not find market dropdown")
 
-            for market in MARKETS:
+            for i, market in enumerate(MARKETS):
                 logger.info(f"Scraping market: {market}")
-
-                # Remember current first player for change detection
-                old_first = _get_first_player(page)
 
                 # Select the market
                 try:
@@ -322,43 +321,35 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
                     logger.warning(f"Could not select '{market}': {e}")
                     continue
 
-                # Wait for table to actually update
-                time.sleep(2)
-                _wait_for_table_change(page, old_first, timeout=8)
-                page.wait_for_load_state("networkidle", timeout=15000)
-                time.sleep(1)
-
-                # Make sure we're on Over
-                _click_over_under(page, "Over")
                 time.sleep(2)
                 page.wait_for_load_state("networkidle", timeout=10000)
 
-                # Take screenshot of first market for debugging
-                if market == MARKETS[0]:
+                # First market: take debug screenshot and detect columns
+                if i == 0:
                     page.screenshot(path="debug_first_market.png")
-                    # Re-detect columns in case Expanded changed layout
                     new_col_map = _detect_columns(page)
                     if new_col_map:
                         col_map = new_col_map
+
+                # Make sure we're on Over
+                _click_over_under(page, "Over")
+                time.sleep(1)
 
                 # Parse Over bets
                 all_bets.extend(_parse_table_bets(page, col_map, market, "O", threshold, today))
 
                 # Switch to Under
-                old_first = _get_first_player(page)
                 if _click_over_under(page, "Under"):
-                    time.sleep(2)
-                    # Under might have same players but different odds - wait for networkidle
+                    time.sleep(1.5)
                     page.wait_for_load_state("networkidle", timeout=10000)
-                    time.sleep(1)
 
                     all_bets.extend(_parse_table_bets(page, col_map, market, "U", threshold, today))
+
+                    # Switch back to Over for next market
+                    _click_over_under(page, "Over")
+                    time.sleep(0.5)
                 else:
                     logger.warning(f"Could not switch to Under for {market}")
-
-                # Switch back to Over for next market
-                _click_over_under(page, "Over")
-                time.sleep(1)
 
             logger.info(f"Found {len(all_bets)} bets with delta% >= {threshold}% across all books.")
             return all_bets
