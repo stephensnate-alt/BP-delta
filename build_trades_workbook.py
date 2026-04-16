@@ -141,6 +141,7 @@ def build_workbook(trades, out_path: Path):
     # owner -> list of (partner, trade) for unique trades only
     by_owner_partner = defaultdict(lambda: defaultdict(list))
     all_owners = set()
+    total_unique = len(unique)
     for t in unique.values():
         a, b = t["from"], t["to"]
         all_owners.add(a)
@@ -149,6 +150,8 @@ def build_workbook(trades, out_path: Path):
         by_owner_partner[b][a].append(t)
 
     owners_sorted = sorted(all_owners)
+    # Owner -> total unique trades involving them
+    owner_total = {o: sum(len(v) for v in by_owner_partner[o].values()) for o in owners_sorted}
 
     # Sheet-name collision handling: ensure unique short names
     used_titles = {"All Trades"}
@@ -168,13 +171,19 @@ def build_workbook(trades, out_path: Path):
         ws = wb.create_sheet(title)
         ws["A1"] = f"{owner} - trades with each other owner"
         ws["A1"].font = Font(bold=True, size=14)
-        ws.merge_cells("A1:D1")
+        ws.merge_cells("A1:F1")
 
         ws.append([])  # blank row
-        header_row = ["Other Owner", "# Trades"]
+        header_row = [
+            "Other Owner",
+            "# Trades",
+            "Partner League %",
+            "Owner % with Partner",
+            "Trade Index",
+        ]
         # Figure max trades so we know how many trade columns
-        partners = sorted(p for p in by_owner_partner[owner].keys())
-        max_trades = max((len(by_owner_partner[owner][p]) for p in partners), default=0)
+        partners = sorted(p for p in owners_sorted if p != owner)
+        max_trades = max((len(by_owner_partner[owner].get(p, [])) for p in partners), default=0)
         for i in range(1, max_trades + 1):
             header_row.append(f"Trade {i}")
         ws.append(header_row)
@@ -182,28 +191,43 @@ def build_workbook(trades, out_path: Path):
             cell.font = Font(bold=True)
             cell.fill = PatternFill("solid", fgColor="D9E1F2")
 
-        total = 0
+        total = owner_total.get(owner, 0)
         for p in partners:
-            ts = sorted(by_owner_partner[owner][p], key=lambda x: (x["year"], x["date"]))
-            row = [p, len(ts)]
-            total += len(ts)
+            ts = sorted(by_owner_partner[owner].get(p, []), key=lambda x: (x["year"], x["date"]))
+            count = len(ts)
+            partner_league_pct = (owner_total[p] / total_unique) * 100 if total_unique else 0.0
+            owner_share_pct = (count / total) * 100 if total else 0.0
+            if partner_league_pct > 0:
+                index_val = owner_share_pct / partner_league_pct * 100
+            else:
+                index_val = 0.0
+            row = [
+                p,
+                count,
+                round(partner_league_pct, 2),
+                round(owner_share_pct, 2),
+                round(index_val, 1),
+            ]
             for t in ts:
                 row.append(trade_summary(t))
             ws.append(row)
 
         # Total row
-        total_row = ["TOTAL", total]
+        total_row = ["TOTAL", total, "", "", ""]
         ws.append(total_row)
-        for cell in ws[ws.max_row][:2]:
+        for cell in ws[ws.max_row][:5]:
             cell.font = Font(bold=True)
             cell.fill = PatternFill("solid", fgColor="FFF2CC")
 
         # Column widths
         ws.column_dimensions["A"].width = 24
         ws.column_dimensions["B"].width = 10
-        for i in range(3, 3 + max_trades):
+        ws.column_dimensions["C"].width = 18
+        ws.column_dimensions["D"].width = 20
+        ws.column_dimensions["E"].width = 13
+        for i in range(6, 6 + max_trades):
             ws.column_dimensions[get_column_letter(i)].width = 80
-        ws.freeze_panes = "C4"
+        ws.freeze_panes = "F4"
 
     wb.save(out_path)
 
