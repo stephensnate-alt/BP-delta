@@ -152,6 +152,8 @@ def build_workbook(trades, out_path: Path):
     owners_sorted = sorted(all_owners)
     # Owner -> total unique trades involving them
     owner_total = {o: sum(len(v) for v in by_owner_partner[o].values()) for o in owners_sorted}
+    # Total "counterparty slots" across the league: 2 * U (each trade has 2 owners)
+    total_slots = sum(owner_total.values())  # == 2 * total_unique
 
     # Sheet-name collision handling: ensure unique short names
     used_titles = {"All Trades"}
@@ -192,25 +194,36 @@ def build_workbook(trades, out_path: Path):
             cell.fill = PatternFill("solid", fgColor="D9E1F2")
 
         total = owner_total.get(owner, 0)
+        # Partner slots available to this owner (sum of T_Z for Z != X). Used so
+        # Partner League % sums to 100% per sheet and the Index's weighted mean = 100.
+        available_slots = total_slots - total
+        data_start = ws.max_row + 1
         for p in partners:
             ts = sorted(by_owner_partner[owner].get(p, []), key=lambda x: (x["year"], x["date"]))
             count = len(ts)
-            partner_league_pct = (owner_total[p] / total_unique) * 100 if total_unique else 0.0
-            owner_share_pct = (count / total) * 100 if total else 0.0
-            if partner_league_pct > 0:
-                index_val = owner_share_pct / partner_league_pct * 100
+            partner_league_share = (owner_total[p] / available_slots) if available_slots else 0.0
+            owner_share = (count / total) if total else 0.0
+            if partner_league_share > 0:
+                index_val = (owner_share / partner_league_share) * 100
             else:
                 index_val = 0.0
             row = [
                 p,
                 count,
-                round(partner_league_pct, 2),
-                round(owner_share_pct, 2),
-                round(index_val, 1),
+                partner_league_share,  # percent-formatted below
+                owner_share,           # percent-formatted below
+                round(index_val),
             ]
             for t in ts:
                 row.append(trade_summary(t))
             ws.append(row)
+        data_end = ws.max_row
+
+        # Apply Excel cell formats: percentages with 1 decimal, integer index
+        for r in range(data_start, data_end + 1):
+            ws.cell(row=r, column=3).number_format = "0.0%"
+            ws.cell(row=r, column=4).number_format = "0.0%"
+            ws.cell(row=r, column=5).number_format = "0"
 
         # Total row
         total_row = ["TOTAL", total, "", "", ""]
