@@ -155,6 +155,20 @@ def build_workbook(trades, out_path: Path):
     # Total "counterparty slots" across the league: 2 * U (each trade has 2 owners)
     total_slots = sum(owner_total.values())  # == 2 * total_unique
 
+    def pair_expected(a: str, b: str) -> float:
+        """Symmetric expected trades between a and b (same value either direction).
+
+        Under the null model where each owner picks partners proportional to
+        partner activity, directional expecteds are T_a * T_b / (2U - T_a) and
+        T_b * T_a / (2U - T_b). We use the average so the two owner sheets and
+        the summary all agree on one number per pair."""
+        ta, tb = owner_total[a], owner_total[b]
+        if ta == 0 or tb == 0:
+            return 0.0
+        e_ab = (ta * tb) / (total_slots - ta) if total_slots - ta else 0.0
+        e_ba = (tb * ta) / (total_slots - tb) if total_slots - tb else 0.0
+        return (e_ab + e_ba) / 2
+
     # Sheet-name collision handling: ensure unique short names
     used_titles = {"All Trades"}
 
@@ -209,7 +223,7 @@ def build_workbook(trades, out_path: Path):
                 index_val = (owner_share / partner_league_share) * 100
             else:
                 index_val = 0.0
-            expected = total * partner_league_share
+            expected = pair_expected(owner, p)
             variance = count - expected
             row = [
                 p,
@@ -252,72 +266,65 @@ def build_workbook(trades, out_path: Path):
             ws.column_dimensions[get_column_letter(i)].width = 80
         ws.freeze_panes = "H4"
 
-    # --- Summary sheet: Most / Least Aligned traders ---
-    alignment_rows = []
-    for owner in owners_sorted:
-        total = owner_total[owner]
-        available_slots = total_slots - total
-        sum_abs_var = 0.0
-        for p in owners_sorted:
-            if p == owner:
-                continue
-            count = len(by_owner_partner[owner].get(p, []))
-            partner_share = (owner_total[p] / available_slots) if available_slots else 0.0
-            expected = total * partner_share
-            sum_abs_var += abs(count - expected)
-        avg_per_trade = (sum_abs_var / total) if total else 0.0
-        alignment_rows.append({
-            "owner": owner,
-            "total_trades": total,
-            "sum_abs_variance": sum_abs_var,
-            "avg_variance_per_trade": avg_per_trade,
-        })
+    # --- Summary sheet: biggest pair-level variances ---
+    pair_rows = []
+    for i, a in enumerate(owners_sorted):
+        for b in owners_sorted[i + 1:]:
+            actual = len(by_owner_partner[a].get(b, []))
+            expected = pair_expected(a, b)
+            variance = actual - expected
+            pair_rows.append({
+                "a": a,
+                "b": b,
+                "actual": actual,
+                "expected": expected,
+                "variance": variance,
+            })
 
-    # Rank by normalized alignment (avg |variance| per trade). Lower = more aligned.
-    by_alignment = sorted(alignment_rows, key=lambda r: r["avg_variance_per_trade"])
+    over = sorted(pair_rows, key=lambda r: r["variance"], reverse=True)[:10]
+    under = sorted(pair_rows, key=lambda r: r["variance"])[:10]
 
     ws_sum = wb.create_sheet("Summary", 1)  # right after All Trades
-    ws_sum["A1"] = "Trade Pattern Alignment"
+    ws_sum["A1"] = "Biggest Pair-Level Trade Variances"
     ws_sum["A1"].font = Font(bold=True, size=14)
     ws_sum.merge_cells("A1:E1")
     ws_sum["A2"] = (
-        "Expected trades with a partner = (owner's total trades) x (partner's share of "
-        "other-owner trade slots). Variance = actual - expected. Alignment Score = sum "
-        "of |variance| divided by owner's total trades. Lower = more aligned to league "
-        "trading frequency."
+        "Expected trades per pair use a symmetric null model: if each owner "
+        "picked partners in proportion to how often those partners trade, this "
+        "is how many trades you'd expect between them. Variance = Actual - "
+        "Expected. Positive = they trade more than expected; negative = less."
     )
     ws_sum["A2"].alignment = Alignment(wrap_text=True, vertical="top")
     ws_sum.merge_cells("A2:E2")
     ws_sum.row_dimensions[2].height = 48
 
-    def write_block(start_row, title, rows):
+    def write_pair_block(start_row, title, rows):
         ws_sum.cell(row=start_row, column=1, value=title).font = Font(bold=True, size=12)
         ws_sum.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=5)
-        header = ["Rank", "Owner", "Total Trades", "Sum |Variance|", "Avg |Variance| / Trade"]
+        header = ["Rank", "Owner A", "Owner B", "Actual", "Expected", "Variance"]
         for i, h in enumerate(header, 1):
             c = ws_sum.cell(row=start_row + 1, column=i, value=h)
             c.font = Font(bold=True)
             c.fill = PatternFill("solid", fgColor="D9E1F2")
         for i, r in enumerate(rows, 1):
             ws_sum.cell(row=start_row + 1 + i, column=1, value=i)
-            ws_sum.cell(row=start_row + 1 + i, column=2, value=r["owner"])
-            ws_sum.cell(row=start_row + 1 + i, column=3, value=r["total_trades"])
-            cv = ws_sum.cell(row=start_row + 1 + i, column=4, value=round(r["sum_abs_variance"], 1))
-            cv.number_format = "0.0"
-            ca = ws_sum.cell(row=start_row + 1 + i, column=5, value=round(r["avg_variance_per_trade"], 3))
-            ca.number_format = "0.000"
+            ws_sum.cell(row=start_row + 1 + i, column=2, value=r["a"])
+            ws_sum.cell(row=start_row + 1 + i, column=3, value=r["b"])
+            ws_sum.cell(row=start_row + 1 + i, column=4, value=r["actual"])
+            ce = ws_sum.cell(row=start_row + 1 + i, column=5, value=round(r["expected"], 1))
+            ce.number_format = "0.0"
+            cv = ws_sum.cell(row=start_row + 1 + i, column=6, value=round(r["variance"], 1))
+            cv.number_format = "+0.0;-0.0;0.0"
 
-    top10 = by_alignment[:10]
-    bottom10 = list(reversed(by_alignment[-10:]))
-
-    write_block(4, "Top 10 Most Aligned (lowest deviation from expected)", top10)
-    write_block(4 + 2 + 10 + 2, "Bottom 10 Least Aligned (highest deviation from expected)", bottom10)
+    write_pair_block(4, "Top 10 Most Over-Traded Pairs (actual >> expected)", over)
+    write_pair_block(4 + 2 + 10 + 2, "Top 10 Most Under-Traded Pairs (actual << expected)", under)
 
     ws_sum.column_dimensions["A"].width = 6
-    ws_sum.column_dimensions["B"].width = 36
-    ws_sum.column_dimensions["C"].width = 14
-    ws_sum.column_dimensions["D"].width = 16
-    ws_sum.column_dimensions["E"].width = 22
+    ws_sum.column_dimensions["B"].width = 30
+    ws_sum.column_dimensions["C"].width = 30
+    ws_sum.column_dimensions["D"].width = 10
+    ws_sum.column_dimensions["E"].width = 11
+    ws_sum.column_dimensions["F"].width = 11
 
     wb.save(out_path)
 
