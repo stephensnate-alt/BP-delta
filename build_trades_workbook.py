@@ -355,6 +355,134 @@ def build_workbook(trades, out_path: Path):
     ws_tot.column_dimensions["B"].width = 36
     ws_tot.column_dimensions["C"].width = 14
 
+    # --- Picky Traders sheet ---
+    LOW_SAMPLE_OWNERS = {
+        "Michael Zink",
+        "Sean Forman / Mike Webber",
+        "Ben Murphy / Ian Lefkowitz / Jared Weiss",
+    }
+    eligible = [o for o in owners_sorted if o not in LOW_SAMPLE_OWNERS]
+
+    picky_rows = []
+    for owner in eligible:
+        total = owner_total[owner]
+        available = total_slots - total
+        # Partner pool for picky scoring: other eligible owners only
+        partner_pool = [p for p in eligible if p != owner]
+        high = 0
+        low = 0
+        indexes = []
+        for p in partner_pool:
+            count = len(by_owner_partner[owner].get(p, []))
+            partner_share = (owner_total[p] / available) if available else 0.0
+            owner_share = (count / total) if total else 0.0
+            idx = (owner_share / partner_share * 100) if partner_share > 0 else 0.0
+            indexes.append(idx)
+            if idx >= 150:
+                high += 1
+            if idx <= 50:
+                low += 1
+        # Average absolute deviation from 100 (alt. dispersion measure)
+        if indexes:
+            mean_idx = sum(indexes) / len(indexes)
+            stdev = (sum((x - mean_idx) ** 2 for x in indexes) / len(indexes)) ** 0.5
+        else:
+            stdev = 0.0
+        picky_rows.append({
+            "owner": owner,
+            "total_trades": total,
+            "high_count": high,
+            "low_count": low,
+            "extreme_count": high + low,
+            "stdev": stdev,
+        })
+
+    ws_p = wb.create_sheet("Picky Traders", 3)
+    ws_p["A1"] = "Pickiest / Least Picky Traders"
+    ws_p["A1"].font = Font(bold=True, size=14)
+    ws_p.merge_cells("A1:F1")
+    ws_p["A2"] = (
+        "For each owner, count how many partners produced a Trade Index of at "
+        "least 150 (strong preference) or at most 50 (strong avoidance). More "
+        "extremes = pickier. Michael Zink, Sean Forman / Mike Webber, and Ben "
+        "Murphy / Ian Lefkowitz / Jared Weiss excluded from both the rankings "
+        "and each owner's partner pool (low sample)."
+    )
+    ws_p["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws_p.merge_cells("A2:F2")
+    ws_p.row_dimensions[2].height = 60
+
+    def write_picky_block(start_row, title, rows):
+        ws_p.cell(row=start_row, column=1, value=title).font = Font(bold=True, size=12)
+        ws_p.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=6)
+        hdr = [
+            "Rank",
+            "Owner",
+            "Total Trades",
+            "Partners Index >= 150",
+            "Partners Index <= 50",
+            "Extreme Count",
+        ]
+        for i, h in enumerate(hdr, 1):
+            c = ws_p.cell(row=start_row + 1, column=i, value=h)
+            c.font = Font(bold=True)
+            c.fill = PatternFill("solid", fgColor="D9E1F2")
+        for i, r in enumerate(rows, 1):
+            ws_p.cell(row=start_row + 1 + i, column=1, value=i)
+            ws_p.cell(row=start_row + 1 + i, column=2, value=r["owner"])
+            ws_p.cell(row=start_row + 1 + i, column=3, value=r["total_trades"])
+            ws_p.cell(row=start_row + 1 + i, column=4, value=r["high_count"])
+            ws_p.cell(row=start_row + 1 + i, column=5, value=r["low_count"])
+            ws_p.cell(row=start_row + 1 + i, column=6, value=r["extreme_count"])
+
+    # Tie-break: more extremes first; then by stdev
+    by_picky = sorted(picky_rows, key=lambda r: (-r["extreme_count"], -r["stdev"]))
+    top5 = by_picky[:5]
+    bottom5 = list(reversed(by_picky[-5:]))
+    write_picky_block(4, "Top 5 Pickiest (most partners at extremes)", top5)
+    write_picky_block(4 + 2 + 5 + 2, "Top 5 Least Picky (fewest extremes)", bottom5)
+
+    ws_p.column_dimensions["A"].width = 6
+    ws_p.column_dimensions["B"].width = 26
+    ws_p.column_dimensions["C"].width = 14
+    ws_p.column_dimensions["D"].width = 22
+    ws_p.column_dimensions["E"].width = 22
+    ws_p.column_dimensions["F"].width = 16
+
+    # --- Never-Traded Pairs sheet (biggest expected, actual = 0) ---
+    ws_nt = wb.create_sheet("Never Traded", 4)
+    ws_nt["A1"] = "Biggest Unmet Expectations (Pairs That Never Traded)"
+    ws_nt["A1"].font = Font(bold=True, size=14)
+    ws_nt.merge_cells("A1:E1")
+    ws_nt["A2"] = (
+        "Pairs with zero unique trades between them, ranked by the symmetric "
+        "expected-trade count. Variance = Actual - Expected = -Expected."
+    )
+    ws_nt["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws_nt.merge_cells("A2:E2")
+    ws_nt.row_dimensions[2].height = 32
+
+    zero_pairs = [p for p in pair_rows if p["actual"] == 0]
+    zero_pairs.sort(key=lambda r: r["expected"], reverse=True)
+    hdr = ["Rank", "Owner A", "Owner B", "Expected", "Variance"]
+    for i, h in enumerate(hdr, 1):
+        c = ws_nt.cell(row=4, column=i, value=h)
+        c.font = Font(bold=True)
+        c.fill = PatternFill("solid", fgColor="D9E1F2")
+    for i, r in enumerate(zero_pairs[:10], 1):
+        ws_nt.cell(row=4 + i, column=1, value=i)
+        ws_nt.cell(row=4 + i, column=2, value=r["a"])
+        ws_nt.cell(row=4 + i, column=3, value=r["b"])
+        ce = ws_nt.cell(row=4 + i, column=4, value=round(r["expected"], 1))
+        ce.number_format = "0.0"
+        cv = ws_nt.cell(row=4 + i, column=5, value=round(r["variance"], 1))
+        cv.number_format = "+0.0;-0.0;0.0"
+    ws_nt.column_dimensions["A"].width = 6
+    ws_nt.column_dimensions["B"].width = 30
+    ws_nt.column_dimensions["C"].width = 30
+    ws_nt.column_dimensions["D"].width = 11
+    ws_nt.column_dimensions["E"].width = 11
+
     wb.save(out_path)
 
 
