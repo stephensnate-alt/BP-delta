@@ -179,6 +179,8 @@ def build_workbook(trades, out_path: Path):
         header_row = [
             "Other Owner",
             "# Trades",
+            "Expected",
+            "Variance",
             "Partner League %",
             "Owner % with Partner",
             "Trade Index",
@@ -207,9 +209,13 @@ def build_workbook(trades, out_path: Path):
                 index_val = (owner_share / partner_league_share) * 100
             else:
                 index_val = 0.0
+            expected = total * partner_league_share
+            variance = count - expected
             row = [
                 p,
                 count,
+                round(expected, 1),
+                round(variance, 1),
                 partner_league_share,  # percent-formatted below
                 owner_share,           # percent-formatted below
                 round(index_val),
@@ -221,26 +227,97 @@ def build_workbook(trades, out_path: Path):
 
         # Apply Excel cell formats: percentages with 1 decimal, integer index
         for r in range(data_start, data_end + 1):
-            ws.cell(row=r, column=3).number_format = "0.0%"
-            ws.cell(row=r, column=4).number_format = "0.0%"
-            ws.cell(row=r, column=5).number_format = "0"
+            ws.cell(row=r, column=5).number_format = "0.0%"
+            ws.cell(row=r, column=6).number_format = "0.0%"
+            ws.cell(row=r, column=7).number_format = "0"
+            ws.cell(row=r, column=3).number_format = "0.0"
+            ws.cell(row=r, column=4).number_format = "+0.0;-0.0;0.0"
 
         # Total row
-        total_row = ["TOTAL", total, "", "", ""]
+        total_row = ["TOTAL", total, "", "", "", "", ""]
         ws.append(total_row)
-        for cell in ws[ws.max_row][:5]:
+        for cell in ws[ws.max_row][:7]:
             cell.font = Font(bold=True)
             cell.fill = PatternFill("solid", fgColor="FFF2CC")
 
         # Column widths
         ws.column_dimensions["A"].width = 24
         ws.column_dimensions["B"].width = 10
-        ws.column_dimensions["C"].width = 18
-        ws.column_dimensions["D"].width = 20
-        ws.column_dimensions["E"].width = 13
-        for i in range(6, 6 + max_trades):
+        ws.column_dimensions["C"].width = 11
+        ws.column_dimensions["D"].width = 11
+        ws.column_dimensions["E"].width = 18
+        ws.column_dimensions["F"].width = 20
+        ws.column_dimensions["G"].width = 13
+        for i in range(8, 8 + max_trades):
             ws.column_dimensions[get_column_letter(i)].width = 80
-        ws.freeze_panes = "F4"
+        ws.freeze_panes = "H4"
+
+    # --- Summary sheet: Most / Least Aligned traders ---
+    alignment_rows = []
+    for owner in owners_sorted:
+        total = owner_total[owner]
+        available_slots = total_slots - total
+        sum_abs_var = 0.0
+        for p in owners_sorted:
+            if p == owner:
+                continue
+            count = len(by_owner_partner[owner].get(p, []))
+            partner_share = (owner_total[p] / available_slots) if available_slots else 0.0
+            expected = total * partner_share
+            sum_abs_var += abs(count - expected)
+        avg_per_trade = (sum_abs_var / total) if total else 0.0
+        alignment_rows.append({
+            "owner": owner,
+            "total_trades": total,
+            "sum_abs_variance": sum_abs_var,
+            "avg_variance_per_trade": avg_per_trade,
+        })
+
+    # Rank by normalized alignment (avg |variance| per trade). Lower = more aligned.
+    by_alignment = sorted(alignment_rows, key=lambda r: r["avg_variance_per_trade"])
+
+    ws_sum = wb.create_sheet("Summary", 1)  # right after All Trades
+    ws_sum["A1"] = "Trade Pattern Alignment"
+    ws_sum["A1"].font = Font(bold=True, size=14)
+    ws_sum.merge_cells("A1:E1")
+    ws_sum["A2"] = (
+        "Expected trades with a partner = (owner's total trades) x (partner's share of "
+        "other-owner trade slots). Variance = actual - expected. Alignment Score = sum "
+        "of |variance| divided by owner's total trades. Lower = more aligned to league "
+        "trading frequency."
+    )
+    ws_sum["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws_sum.merge_cells("A2:E2")
+    ws_sum.row_dimensions[2].height = 48
+
+    def write_block(start_row, title, rows):
+        ws_sum.cell(row=start_row, column=1, value=title).font = Font(bold=True, size=12)
+        ws_sum.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=5)
+        header = ["Rank", "Owner", "Total Trades", "Sum |Variance|", "Avg |Variance| / Trade"]
+        for i, h in enumerate(header, 1):
+            c = ws_sum.cell(row=start_row + 1, column=i, value=h)
+            c.font = Font(bold=True)
+            c.fill = PatternFill("solid", fgColor="D9E1F2")
+        for i, r in enumerate(rows, 1):
+            ws_sum.cell(row=start_row + 1 + i, column=1, value=i)
+            ws_sum.cell(row=start_row + 1 + i, column=2, value=r["owner"])
+            ws_sum.cell(row=start_row + 1 + i, column=3, value=r["total_trades"])
+            cv = ws_sum.cell(row=start_row + 1 + i, column=4, value=round(r["sum_abs_variance"], 1))
+            cv.number_format = "0.0"
+            ca = ws_sum.cell(row=start_row + 1 + i, column=5, value=round(r["avg_variance_per_trade"], 3))
+            ca.number_format = "0.000"
+
+    top10 = by_alignment[:10]
+    bottom10 = list(reversed(by_alignment[-10:]))
+
+    write_block(4, "Top 10 Most Aligned (lowest deviation from expected)", top10)
+    write_block(4 + 2 + 10 + 2, "Bottom 10 Least Aligned (highest deviation from expected)", bottom10)
+
+    ws_sum.column_dimensions["A"].width = 6
+    ws_sum.column_dimensions["B"].width = 36
+    ws_sum.column_dimensions["C"].width = 14
+    ws_sum.column_dimensions["D"].width = 16
+    ws_sum.column_dimensions["E"].width = 22
 
     wb.save(out_path)
 
