@@ -223,7 +223,9 @@ def build_workbook(trades, out_path: Path):
                 index_val = (owner_share / partner_league_share) * 100
             else:
                 index_val = 0.0
-            expected = pair_expected(owner, p)
+            # Directional expected from THIS owner's perspective so that the
+            # column sums to the owner's Total Trades.
+            expected = total * partner_league_share
             variance = count - expected
             row = [
                 p,
@@ -248,11 +250,13 @@ def build_workbook(trades, out_path: Path):
             ws.cell(row=r, column=4).number_format = "+0.0;-0.0;0.0"
 
         # Total row
-        total_row = ["TOTAL", total, "", "", "", "", ""]
+        total_row = ["TOTAL", total, round(total, 1), 0.0, "", "", ""]
         ws.append(total_row)
         for cell in ws[ws.max_row][:7]:
             cell.font = Font(bold=True)
             cell.fill = PatternFill("solid", fgColor="FFF2CC")
+        ws.cell(row=ws.max_row, column=3).number_format = "0.0"
+        ws.cell(row=ws.max_row, column=4).number_format = "+0.0;-0.0;0.0"
 
         # Column widths
         ws.column_dimensions["A"].width = 24
@@ -325,6 +329,31 @@ def build_workbook(trades, out_path: Path):
     ws_sum.column_dimensions["D"].width = 10
     ws_sum.column_dimensions["E"].width = 11
     ws_sum.column_dimensions["F"].width = 11
+
+    # --- Totals sheet: trades per owner, sorted descending ---
+    ws_tot = wb.create_sheet("Totals", 2)
+    ws_tot["A1"] = "Total Unique Trades per Owner"
+    ws_tot["A1"].font = Font(bold=True, size=14)
+    ws_tot.merge_cells("A1:C1")
+    header = ["Rank", "Owner", "Total Trades"]
+    for i, h in enumerate(header, 1):
+        c = ws_tot.cell(row=3, column=i, value=h)
+        c.font = Font(bold=True)
+        c.fill = PatternFill("solid", fgColor="D9E1F2")
+    by_total = sorted(owners_sorted, key=lambda o: owner_total[o], reverse=True)
+    for i, o in enumerate(by_total, 1):
+        ws_tot.cell(row=3 + i, column=1, value=i)
+        ws_tot.cell(row=3 + i, column=2, value=o)
+        ws_tot.cell(row=3 + i, column=3, value=owner_total[o])
+    # Grand total row (sum of T_X = 2U because each trade has 2 owners)
+    grand_row = 3 + len(by_total) + 1
+    ws_tot.cell(row=grand_row, column=2, value="LEAGUE UNIQUE TRADES").font = Font(bold=True)
+    ws_tot.cell(row=grand_row, column=3, value=total_unique).font = Font(bold=True)
+    ws_tot.cell(row=grand_row, column=2).fill = PatternFill("solid", fgColor="FFF2CC")
+    ws_tot.cell(row=grand_row, column=3).fill = PatternFill("solid", fgColor="FFF2CC")
+    ws_tot.column_dimensions["A"].width = 6
+    ws_tot.column_dimensions["B"].width = 36
+    ws_tot.column_dimensions["C"].width = 14
 
     wb.save(out_path)
 
