@@ -107,26 +107,36 @@ def _click_button(page, label):
 
 
 def _scrape_table(page):
-    """Read only VISIBLE cells from the table (hidden columns are in DOM but invisible)."""
-    return page.evaluate("""() => {
-        const table = document.querySelector('table');
-        if (!table) return [];
-        const rows = table.querySelectorAll('tbody tr');
-        const result = [];
-        for (const row of rows) {
-            const cells = row.querySelectorAll('td');
-            const visible = [];
-            for (const c of cells) {
-                if (c.offsetWidth > 0 && c.offsetHeight > 0) {
-                    visible.push(c.innerText.trim());
+    """Read only VISIBLE cells from the table. Retries if page is mid-navigation."""
+    for attempt in range(3):
+        try:
+            return page.evaluate("""() => {
+                const table = document.querySelector('table');
+                if (!table) return [];
+                const rows = table.querySelectorAll('tbody tr');
+                const result = [];
+                for (const row of rows) {
+                    const cells = row.querySelectorAll('td');
+                    const visible = [];
+                    for (const c of cells) {
+                        if (c.offsetWidth > 0 && c.offsetHeight > 0) {
+                            visible.push(c.innerText.trim());
+                        }
+                    }
+                    if (visible.length >= 4) {
+                        result.push(visible);
+                    }
                 }
-            }
-            if (visible.length >= 4) {
-                result.push(visible);
-            }
-        }
-        return result;
-    }""")
+                return result;
+            }""")
+        except Exception:
+            time.sleep(2)
+            try:
+                page.wait_for_load_state("load", timeout=10000)
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
+    return []
 
 
 def _parse_bets(rows, market, over_under, threshold, today, debug_count=3):
@@ -239,8 +249,12 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
                     if not _select_market(page, market):
                         continue
 
-                    time.sleep(1.5)
-                    page.wait_for_load_state("networkidle", timeout=15000)
+                    time.sleep(2)
+                    try:
+                        page.wait_for_load_state("load", timeout=15000)
+                        page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        pass
                     try:
                         page.wait_for_selector("table", timeout=10000, state="visible")
                     except Exception:
@@ -249,8 +263,7 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
 
                     # ── OVER ──
                     _click_button(page, "Over")
-                    time.sleep(1)
-                    page.wait_for_load_state("networkidle", timeout=10000)
+                    _wait_and_settle(page)
 
                     rows = _scrape_table(page)
                     over_bets = _parse_bets(rows, market, "O", threshold, today)
@@ -259,8 +272,7 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
 
                     # ── UNDER ──
                     _click_button(page, "Under")
-                    time.sleep(1)
-                    page.wait_for_load_state("networkidle", timeout=10000)
+                    _wait_and_settle(page)
 
                     rows = _scrape_table(page)
                     under_bets = _parse_bets(rows, market, "U", threshold, today)
