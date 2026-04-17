@@ -106,6 +106,19 @@ def _click_button(page, label):
         return False
 
 
+def _wait_and_settle(page):
+    """Wait for page to finish loading after a click or dropdown change."""
+    time.sleep(1)
+    try:
+        page.wait_for_load_state("load", timeout=10000)
+    except Exception:
+        pass
+    try:
+        page.wait_for_load_state("networkidle", timeout=10000)
+    except Exception:
+        pass
+
+
 def _scrape_table(page):
     """Read only VISIBLE cells from the table. Retries if page is mid-navigation."""
     for attempt in range(3):
