@@ -204,7 +204,7 @@ def _parse_bets(rows, market, over_under, threshold, bet_date, debug_count=3):
             delta_pct = _calc_delta_pct(bp_odds, book_odds)
             if delta_pct >= threshold:
                 bets.append({
-                    "date": today,
+                    "date": bet_date,
                     "team": team,
                     "player": player,
                     "market": market,
