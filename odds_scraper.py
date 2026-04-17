@@ -192,29 +192,15 @@ def _parse_bets(rows, market, over_under, threshold, bet_date, debug_count=3):
         team = text[COL_TEAM]
         player = text[COL_PLAYER]
 
-        # Collect all available book odds for this row
-        all_book_odds = {}
         for i, book in enumerate(BOOKS):
             col_idx = COL_BOOKS_START + i
             if col_idx >= len(text):
                 continue
-            odds = _parse_odds_cell(text[col_idx])
-            if odds is not None:
-                all_book_odds[book] = odds
 
-        # Calculate consensus odds (average implied prob -> back to odds)
-        cs_odds = None
-        cs_delta = None
-        if all_book_odds:
-            avg_prob = sum(_odds_to_implied_prob(o) for o in all_book_odds.values()) / len(all_book_odds)
-            if avg_prob > 0 and avg_prob < 1:
-                if avg_prob >= 0.5:
-                    cs_odds = int(round(-avg_prob / (1 - avg_prob) * 100))
-                else:
-                    cs_odds = int(round((1 - avg_prob) / avg_prob * 100))
-                cs_delta = _calc_delta_pct(bp_odds, cs_odds)
+            book_odds = _parse_odds_cell(text[col_idx])
+            if book_odds is None:
+                continue
 
-        for book, book_odds in all_book_odds.items():
             delta_pct = _calc_delta_pct(bp_odds, book_odds)
             if delta_pct >= threshold:
                 bets.append({
@@ -228,14 +214,15 @@ def _parse_bets(rows, market, over_under, threshold, bet_date, debug_count=3):
                     "bp_odds": bp_odds,
                     "book": book,
                     "delta_pct": delta_pct,
-                    "cs_odds": cs_odds,
-                    "cs_delta": cs_delta,
+                    "cs_odds": "",
+                    "cs_delta": "",
+                    "solo": "",
                     "exp_profit": _calc_expected_profit(bp_odds, book_odds),
                     "result": "",
                     "profit": "",
                 })
 
-    # Calculate "Solo" - only qualifying bet for this player+market+line+O/U
+    # Calculate "Solo" - only one book qualifies for this player+market+line+O/U
     player_keys = {}
     for b in bets:
         key = (b["player"], b["market"], b["line"], b["over_under"])
@@ -246,6 +233,78 @@ def _parse_bets(rows, market, over_under, threshold, bet_date, debug_count=3):
             b["solo"] = is_solo
 
     return bets
+
+
+def _pev_key(player, market, over_under, line):
+    """Build a lookup key for cross-referencing with the Positive EV page."""
+    return (player.strip().lower(), market.strip().lower(),
+            over_under.strip().upper(), str(line).strip())
+
+
+# Map Positive EV market names to Odds Screen market names
+PEV_MARKET_MAP = {
+    "strikeouts": "pitcher strikeouts",
+    "outs": "pitcher outs",
+    "hits allowed": "pitcher hits allowed",
+    "walks": "pitcher walks",
+    "earned runs": "pitcher earned runs",
+    "batting walks": "batter walks",
+    "stolen bases": "batter stolen bases",
+    "bases": "batter bases",
+    "hits": "batter hits",
+    "runs": "batter runs",
+    "rbis": "batter rbis",
+    "home runs": "batter home runs",
+    "doubles": "batter doubles",
+    "triples": "batter triples",
+    "singles": "batter singles",
+    "h+r+rbi": "batter h+r+rbi",
+    "hits + runs + rbis": "batter h+r+rbi",
+}
+
+
+def _scrape_positive_ev_lookup(page, bet_date):
+    """
+    Scrape the Positive EV page and build a lookup dict.
+    Key: (player, market, o/u, line) -> {cs, delta}
+    No filtering - capture ALL rows regardless of book or edge.
+    """
+    ev_url = f"{config.BP_POSITIVE_EV_URL}?date={bet_date}"
+    logger.info(f"Loading Positive EV page for {bet_date}...")
+    page.goto(ev_url, wait_until="networkidle", timeout=30000)
+
+    try:
+        page.wait_for_selector("table", timeout=15000, state="visible")
+    except Exception:
+        logger.warning("No table found on Positive EV page")
+        return {}
+
+    # Columns: Tm=0 | Player=1 | Bk=2 | Market=3 | O/U=4 | Line=5 | Odds=6 | CS=7 | Δ=8 | BP=9 | Δ%=10
+    rows = page.query_selector_all("table tbody tr, table tr")
+    lookup = {}
+
+    for row in rows:
+        cells = row.query_selector_all("td")
+        if len(cells) < 11:
+            continue
+
+        text = [c.inner_text().strip() for c in cells]
+
+        player = text[1]
+        market_raw = text[3].strip().lower()
+        over_under = text[4].strip().upper()
+        line = text[5].strip()
+        cs = text[7]
+        delta = text[8]
+
+        # Map PEV market name to Odds Screen market name for matching
+        market_mapped = PEV_MARKET_MAP.get(market_raw, market_raw)
+
+        key = _pev_key(player, market_mapped, over_under, line)
+        lookup[key] = {"cs": cs, "delta": delta}
+
+    logger.info(f"Positive EV lookup: {len(lookup)} entries")
+    return lookup
 
 
 def scrape_odds_screen(edge_threshold=None, headless=True, target_date=None):
@@ -325,6 +384,23 @@ def scrape_odds_screen(edge_threshold=None, headless=True, target_date=None):
                 except Exception as e:
                     logger.warning(f"  Error on {market}, skipping: {e}")
                     continue
+
+            # Cross-reference with Positive EV page for CS Odds and CS Delta
+            if all_bets:
+                logger.info("Cross-referencing with Positive EV page...")
+                try:
+                    pev_lookup = _scrape_positive_ev_lookup(page, bet_date)
+                    matched = 0
+                    for bet in all_bets:
+                        key = _pev_key(bet["player"], bet["market"],
+                                       bet["over_under"], str(bet["line"]))
+                        if key in pev_lookup:
+                            bet["cs_odds"] = pev_lookup[key]["cs"]
+                            bet["cs_delta"] = pev_lookup[key]["delta"]
+                            matched += 1
+                    logger.info(f"Matched {matched}/{len(all_bets)} bets with Positive EV data")
+                except Exception as e:
+                    logger.warning(f"Could not cross-reference Positive EV: {e}")
 
             logger.info(f"DONE: {len(all_bets)} total bets with delta >= {threshold}%")
             return all_bets
