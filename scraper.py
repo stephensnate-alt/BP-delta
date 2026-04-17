@@ -63,7 +63,7 @@ def login(page):
     logger.info("Login successful.")
 
 
-def parse_positive_ev(page, edge_threshold=None):
+def parse_positive_ev(page, edge_threshold=None, target_date=None):
     """
     Parse the Positive EV table, filtering for DK book and edge threshold.
 
@@ -71,15 +71,16 @@ def parse_positive_ev(page, edge_threshold=None):
     """
     threshold = edge_threshold if edge_threshold is not None else config.EDGE_THRESHOLD
 
-    logger.info("Navigating to Positive EV page...")
-    page.goto(config.BP_POSITIVE_EV_URL, wait_until="networkidle")
+    bet_date = target_date or date.today().isoformat()
+    ev_url = f"{config.BP_POSITIVE_EV_URL}?date={bet_date}"
+    logger.info(f"Navigating to Positive EV page for {bet_date}...")
+    page.goto(ev_url, wait_until="networkidle")
     page.wait_for_selector(SELECTORS["data_table"], timeout=15000)
 
     rows = page.query_selector_all(SELECTORS["data_rows"])
     logger.info(f"Found {len(rows)} total rows in table.")
 
     bets = []
-    today = date.today().isoformat()
 
     for row in rows:
         cells = row.query_selector_all("td")
@@ -139,7 +140,7 @@ def parse_positive_ev(page, edge_threshold=None):
         exp_profit = round(p_true * win_amount - (1 - p_true) * config.BET_SIZE, 2)
 
         bet = {
-            "date": today,
+            "date": bet_date,
             "team": text[COL_TEAM],
             "player": text[COL_PLAYER],
             "market": text[COL_MARKET],
@@ -160,13 +161,14 @@ def parse_positive_ev(page, edge_threshold=None):
     return bets
 
 
-def scrape_bets(edge_threshold=None, headless=True):
+def scrape_bets(edge_threshold=None, headless=True, target_date=None):
     """
     Top-level entry point. Launches browser, logs in, scrapes, filters.
 
     Args:
         edge_threshold: Minimum delta% to include. Defaults to config.EDGE_THRESHOLD.
         headless: Run browser in headless mode. Set False for debugging.
+        target_date: Date to scrape (YYYY-MM-DD). Defaults to today.
 
     Returns:
         List of bet dicts passing the edge filter.
@@ -176,7 +178,7 @@ def scrape_bets(edge_threshold=None, headless=True):
         page = browser.new_page()
         try:
             login(page)
-            bets = parse_positive_ev(page, edge_threshold)
+            bets = parse_positive_ev(page, edge_threshold, target_date)
             return bets
         except Exception as e:
             logger.exception(f"Scraping failed: {e}")

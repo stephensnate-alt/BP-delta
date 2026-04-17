@@ -6,7 +6,7 @@ calculates delta%, and flags bets with 5%+ edge.
 """
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 from playwright.sync_api import sync_playwright
 import time
 
@@ -139,7 +139,7 @@ def _scrape_table(page):
     return []
 
 
-def _parse_bets(rows, market, over_under, threshold, today, debug_count=3):
+def _parse_bets(rows, market, over_under, threshold, bet_date, debug_count=3):
     """Extract qualifying bets using fixed Expanded column indices."""
     bets = []
     logged = 0
@@ -209,9 +209,12 @@ def _parse_bets(rows, market, over_under, threshold, today, debug_count=3):
     return bets
 
 
-def scrape_odds_screen(edge_threshold=None, headless=True):
+def scrape_odds_screen(edge_threshold=None, headless=True, target_date=None):
     threshold = edge_threshold if edge_threshold is not None else config.EDGE_THRESHOLD
-    today = date.today().isoformat()
+    if target_date:
+        bet_date = target_date
+    else:
+        bet_date = date.today().isoformat()
     all_bets = []
 
     with sync_playwright() as pw:
@@ -222,12 +225,13 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
             from scraper import login
             login(page)
 
-            logger.info("Navigating to Odds Screen...")
-            page.goto(config.BP_ODDS_URL, wait_until="networkidle", timeout=30000)
+            odds_url = f"{config.BP_ODDS_URL}?date={bet_date}"
+            logger.info(f"Navigating to Odds Screen for {bet_date}...")
+            page.goto(odds_url, wait_until="networkidle", timeout=30000)
 
             if "login" in page.url.lower():
                 login(page)
-                page.goto(config.BP_ODDS_URL, wait_until="networkidle", timeout=30000)
+                page.goto(odds_url, wait_until="networkidle", timeout=30000)
 
             page.wait_for_selector("table", timeout=30000, state="visible")
             time.sleep(2)
@@ -266,7 +270,7 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
                     _wait_and_settle(page)
 
                     rows = _scrape_table(page)
-                    over_bets = _parse_bets(rows, market, "O", threshold, today)
+                    over_bets = _parse_bets(rows, market, "O", threshold, bet_date)
                     logger.info(f"  Over: {len(rows)} rows, {len(over_bets)} bets")
                     all_bets.extend(over_bets)
 
@@ -275,7 +279,7 @@ def scrape_odds_screen(edge_threshold=None, headless=True):
                     _wait_and_settle(page)
 
                     rows = _scrape_table(page)
-                    under_bets = _parse_bets(rows, market, "U", threshold, today)
+                    under_bets = _parse_bets(rows, market, "U", threshold, bet_date)
                     logger.info(f"  Under: {len(rows)} rows, {len(under_bets)} bets")
                     all_bets.extend(under_bets)
 

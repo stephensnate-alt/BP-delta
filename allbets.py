@@ -47,12 +47,22 @@ def cli(verbose):
               help=f"Minimum edge %% (default: {config.EDGE_THRESHOLD})")
 @click.option("--dry-run", is_flag=True)
 @click.option("--no-headless", is_flag=True)
-def scan(threshold, dry_run, no_headless):
+@click.option("--tomorrow", is_flag=True, help="Scan tomorrow's lines instead of today")
+@click.option("--date", "scan_date", default=None, help="Scan a specific date (YYYY-MM-DD)")
+def scan(threshold, dry_run, no_headless, tomorrow, scan_date):
     """Scrape odds screen for bets with 5%+ edge across all books."""
     t = threshold or config.EDGE_THRESHOLD
-    click.echo(f"Scanning odds screen for bets with delta% >= {t}%...")
 
-    bets = scrape_odds_screen(edge_threshold=t, headless=not no_headless)
+    if scan_date:
+        target = scan_date
+    elif tomorrow:
+        target = (date.today() + timedelta(days=1)).isoformat()
+    else:
+        target = date.today().isoformat()
+
+    click.echo(f"Scanning odds screen for {target}, delta% >= {t}%...")
+
+    bets = scrape_odds_screen(edge_threshold=t, headless=not no_headless, target_date=target)
 
     if not bets:
         click.echo("No qualifying bets found.")

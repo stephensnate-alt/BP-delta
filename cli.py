@@ -53,13 +53,24 @@ def cli(verbose):
               help="Scrape and display bets without writing to sheet")
 @click.option("--no-headless", is_flag=True,
               help="Show browser window (for debugging)")
-def analyze(threshold, dry_run, no_headless):
-    """Scrape BP for today's DK bets with positive edge."""
+@click.option("--tomorrow", is_flag=True, help="Scan tomorrow's lines")
+@click.option("--date", "scan_date", default=None, help="Scan a specific date (YYYY-MM-DD)")
+def analyze(threshold, dry_run, no_headless, tomorrow, scan_date):
+    """Scrape BP for DK bets with positive edge."""
     t = threshold or config.EDGE_THRESHOLD
-    click.echo(f"Scraping BP for DK bets with delta% >= {t}%...")
+
+    if scan_date:
+        target = scan_date
+    elif tomorrow:
+        target = (date.today() + timedelta(days=1)).isoformat()
+    else:
+        target = None
+
+    day_label = target or "today"
+    click.echo(f"Scraping BP ({day_label}) for DK bets with delta% >= {t}%...")
 
     try:
-        bets = scrape_bets(edge_threshold=t, headless=not no_headless)
+        bets = scrape_bets(edge_threshold=t, headless=not no_headless, target_date=target)
     except ScraperError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
