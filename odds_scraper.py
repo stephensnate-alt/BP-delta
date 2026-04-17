@@ -192,15 +192,29 @@ def _parse_bets(rows, market, over_under, threshold, bet_date, debug_count=3):
         team = text[COL_TEAM]
         player = text[COL_PLAYER]
 
+        # Collect all available book odds for this row
+        all_book_odds = {}
         for i, book in enumerate(BOOKS):
             col_idx = COL_BOOKS_START + i
             if col_idx >= len(text):
                 continue
+            odds = _parse_odds_cell(text[col_idx])
+            if odds is not None:
+                all_book_odds[book] = odds
 
-            book_odds = _parse_odds_cell(text[col_idx])
-            if book_odds is None:
-                continue
+        # Calculate consensus odds (average implied prob -> back to odds)
+        cs_odds = None
+        cs_delta = None
+        if all_book_odds:
+            avg_prob = sum(_odds_to_implied_prob(o) for o in all_book_odds.values()) / len(all_book_odds)
+            if avg_prob > 0 and avg_prob < 1:
+                if avg_prob >= 0.5:
+                    cs_odds = int(round(-avg_prob / (1 - avg_prob) * 100))
+                else:
+                    cs_odds = int(round((1 - avg_prob) / avg_prob * 100))
+                cs_delta = _calc_delta_pct(bp_odds, cs_odds)
 
+        for book, book_odds in all_book_odds.items():
             delta_pct = _calc_delta_pct(bp_odds, book_odds)
             if delta_pct >= threshold:
                 bets.append({
@@ -214,10 +228,22 @@ def _parse_bets(rows, market, over_under, threshold, bet_date, debug_count=3):
                     "bp_odds": bp_odds,
                     "book": book,
                     "delta_pct": delta_pct,
+                    "cs_odds": cs_odds,
+                    "cs_delta": cs_delta,
                     "exp_profit": _calc_expected_profit(bp_odds, book_odds),
                     "result": "",
                     "profit": "",
                 })
+
+    # Calculate "Solo" - only qualifying bet for this player+market+line+O/U
+    player_keys = {}
+    for b in bets:
+        key = (b["player"], b["market"], b["line"], b["over_under"])
+        player_keys.setdefault(key, []).append(b)
+    for key, group in player_keys.items():
+        is_solo = "Y" if len(group) == 1 else ""
+        for b in group:
+            b["solo"] = is_solo
 
     return bets
 

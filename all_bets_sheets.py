@@ -14,13 +14,14 @@ logger = logging.getLogger(__name__)
 
 HEADERS = [
     "Date", "Team", "Player", "Market", "O/U", "Line",
-    "Book Odds", "BP Odds", "Book", "Delta%", "Exp Profit",
-    "Result", "Actual Profit",
+    "Book Odds", "BP Odds", "Book", "Delta%",
+    "CS Odds", "CS Delta", "Solo",
+    "Exp Profit", "Result", "Actual Profit",
 ]
 
-COL_EXP_PROFIT = 11
-COL_RESULT = 12
-COL_PROFIT = 13
+COL_EXP_PROFIT = 14
+COL_RESULT = 15
+COL_PROFIT = 16
 
 
 def _get_client():
@@ -84,6 +85,9 @@ def bet_to_row(bet):
         bet["bp_odds"],
         bet["book"],
         bet["delta_pct"],
+        bet.get("cs_odds", ""),
+        bet.get("cs_delta", ""),
+        bet.get("solo", ""),
         bet.get("exp_profit", ""),
         bet.get("result", ""),
         bet.get("profit", ""),
@@ -103,9 +107,12 @@ def row_to_bet(row):
         "bp_odds": padded[7],
         "book": padded[8],
         "delta_pct": padded[9],
-        "exp_profit": padded[10],
-        "result": padded[11],
-        "profit": padded[12],
+        "cs_odds": padded[10],
+        "cs_delta": padded[11],
+        "solo": padded[12],
+        "exp_profit": padded[13],
+        "result": padded[14],
+        "profit": padded[15],
     }
 
 
