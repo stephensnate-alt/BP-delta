@@ -1,0 +1,52 @@
+=============================================
+  BP-DELTA REFERENCE & TO-DO LIST
+=============================================
+
+─── TO DO ───────────────────────────────────
+[ ] Set up git in project folder (one-time):
+      git init
+      git remote add origin https://github.com/stephensnate-alt/BP-delta.git
+      git fetch origin claude/ballpark-pal-bet-tracker-RkV7o
+      git checkout claude/ballpark-pal-bet-tracker-RkV7o
+
+[ ] When switching to TERMINAL: tell it "pull the latest from the repo first"
+[ ] When switching to DESKTOP (me): tell me "the terminal made changes, pull them"
+[ ]
+[ ]
+[ ]
+
+─── COMMANDS ────────────────────────────────
+
+FIRST: Always cd to project folder:
+  cd C:\Users\nate_\OneDrive\Desktop\BP-delta-claude-ballpark-pal-bet-tracker-RkV7o\BP-delta-claude-ballpark-pal-bet-tracker-RkV7o
+
+── DK-Only (Positive EV) ──
+Scan today:        python cli.py analyze --no-headless
+Scan tomorrow:     python cli.py analyze --no-headless --tomorrow
+Scan specific:     python cli.py analyze --no-headless --date 2026-04-18
+Dry run:           python cli.py analyze --no-headless --dry-run
+Grade:             python cli.py grade
+Grade yesterday:   python cli.py grade -d yesterday
+Reports:           python cli.py report --all
+Live check:        python cli.py live
+Fix EV:            python cli.py fix-ev
+
+── All Books (Odds Screen) ──
+Scan today:        python allbets.py scan --no-headless
+Scan tomorrow:     python allbets.py scan --no-headless --tomorrow
+Scan specific:     python allbets.py scan --no-headless --date 2026-04-18
+Dry run:           python allbets.py scan --no-headless --dry-run
+Grade:             python allbets.py grade
+Reports:           python allbets.py report
+
+── Terminal Claude Code ──
+Start:             claude
+                   (from the project folder)
+
+─── NOTES ───────────────────────────────────
+- DK scraper = cli.py (Positive EV page, DraftKings only)
+- All Books scraper = allbets.py (Odds Screen, all 6 books: DK, FD, NV, KA, PM, PX)
+- Separate Google Sheets: GOOGLE_SHEETS_ID (DK) and ALL_BETS_SHEET_ID (All Books)
+- Edge threshold default: 5%
+-
+-
