@@ -1,0 +1,90 @@
+draft_year,round,pick,player,drafted_by,college,rookie_games,rookie_half_ppr_total,wk15_17_half_ppr_total,wk15_17_games_played,wk15_17_best_week,any_wk15_17_ge_15,any_wk15_17_ge_20
+2024,4,125,Bucky Irving,TAM,Oregon,17,220.9,50.0,3,21.0,True,True
+2023,3,84,De'Von Achane,MIA,Texas A&M,11,177.2,33.0,3,21.7,True,True
+2024,5,166,Tyrone Tracy Jr.,NYG,Purdue,17,163.3,27.2,3,14.9,False,False
+2021,6,194,Elijah Mitchell,SFO,Louisiana,11,155.5,20.0,1,20.0,True,True
+2022,4,107,Dameon Pierce,HOU,Florida,13,151.4,0.0,0,0.0,False,False
+2022,5,151,Tyler Allgeier,ATL,BYU,16,151.4,51.8,3,22.1,True,True
+2025,7,233,Kyle Monangai,CHI,Rutgers,17,137.7,20.3,3,10.8,False,False
+2021,4,107,Michael Carter,NYJ,North Carolina,14,136.4,22.7,3,13.4,False,False
+2025,7,245,Jacory Croskey-Merritt,WAS,Arizona,17,135.8,46.6,3,22.5,True,True
+2025,4,116,Woody Marks,HOU,USC,16,133.1,12.3,2,8.0,False,False
+2022,7,251,Isiah Pacheco,KAN,Rutgers,17,128.5,29.6,3,11.9,False,False
+2023,3,81,Tyjae Spears,TEN,Tulane,17,127.8,18.3,3,9.2,False,False
+2021,4,126,Chuba Hubbard,CAR,Oklahoma St.,16,125.1,19.8,3,14.3,False,False
+2022,3,91,Rachaad White,TAM,Arizona St.,17,116.1,25.4,3,13.3,False,False
+2025,4,105,Cam Skattebo,NYG,Arizona St.,8,115.7,0.0,0,0.0,False,False
+2022,3,98,Brian Robinson Jr.,WAS,Alabama,12,108.2,25.7,3,11.2,False,False
+2021,4,120,Rhamondre Stevenson,NWE,Oklahoma,12,107.9,27.2,2,22.7,True,True
+2024,4,128,Ray Davis,BUF,Kentucky,17,107.6,15.1,3,9.9,False,False
+2021,5,150,Kenneth Gainwell,PHI,Memphis,16,106.9,1.5,3,1.1,False,False
+2024,4,129,Isaac Guerendo,SFO,Louisville,16,88.7,21.4,2,11.9,False,False
+2023,4,115,Roschon Johnson,CHI,Texas,15,85.1,28.2,3,13.4,False,False
+2025,4,104,Bhayshul Tuten,JAX,Virginia Tech,15,83.6,8.8,1,8.8,False,False
+2024,4,134,Braelon Allen,NYJ,Wisconsin,17,75.7,4.6,3,2.6,False,False
+2021,6,217,Khalil Herbert,CHI,Virginia Tech,16,71.9,15.1,3,9.3,False,False
+2025,4,126,Dylan Sampson,CLE,Tennessee,15,71.1,4.2,1,4.2,False,False
+2025,6,184,Devin Neal,NOR,Kansas,9,51.5,9.7,1,9.7,False,False
+2025,7,228,Brashard Smith,KAN,SMU,17,50.8,9.0,3,8.0,False,False
+2025,6,179,Ollie Gordon,MIA,Oklahoma St.,17,50.6,-0.1,3,0.0,False,False
+2023,5,163,Chase Brown,CIN,Illinois,12,46.5,13.8,3,6.6,False,False
+2024,5,147,Audric Estime,DEN,Notre Dame,13,46.2,17.3,3,10.8,False,False
+2024,3,66,Trey Benson,ARI,Florida St.,12,44.0,2.2,1,2.2,False,False
+2021,6,202,Chris Evans,CIN,Michigan,9,42.3,0.1,1,0.1,False,False
+2021,6,211,Demetric Felton,CLE,UCLA,15,41.5,3.1,2,3.1,False,False
+2024,5,173,Isaiah Davis,NYJ,South Dakota St.,13,41.4,9.1,3,4.8,False,False
+2023,3,71,Kendre Miller,NOR,TCU,7,38.3,0.0,0,0.0,False,False
+2023,6,193,Chris Rodriguez,WAS,Kentucky,9,36.9,22.5,2,19.0,True,False
+2024,6,181,Kimani Vidal,LAC,Troy,9,30.2,8.0,3,3.2,False,False
+2024,3,83,Blake Corum,LAR,Michigan,15,30.0,4.0,3,3.0,False,False
+2021,3,88,Trey Sermon,SFO,Ohio St.,6,26.8,0.0,0,0.0,False,False
+2022,5,164,Kyren Williams,LAR,Notre Dame,8,26.0,3.9,3,2.6,False,False
+2024,4,120,Jaylen Wright,MIA,Tennessee,13,25.2,0.3,1,0.3,False,False
+2023,3,88,Tank Bigsby,JAX,Auburn,13,24.3,3.0,2,3.2,False,False
+2021,7,257,Jermar Jefferson,DET,Oregon St.,4,23.7,0.9,1,0.9,False,False
+2022,4,127,Pierre Strong,NWE,South Dakota St.,10,23.7,7.2,3,5.2,False,False
+2021,4,119,Kene Nwangwu,MIN,Iowa St.,9,21.0,5.6,3,3.3,False,False
+2022,4,131,Hassan Haskins,TEN,Michigan,14,20.5,11.5,3,6.3,False,False
+2025,5,149,Jaydon Blue,DAL,Texas,5,19.9,0.0,0,0.0,False,False
+2025,7,236,LeQuint Allen,JAX,Syracuse,16,19.8,3.4,3,2.1,False,False
+2022,6,201,Keaontay Ingram,ARI,USC,11,16.1,0.2,2,0.2,False,False
+2022,7,260,Zander Horvath,LAC,Purdue,8,16.1,0.0,0,0.0,False,False
+2021,6,198,Larry Rountree,LAC,Missouri,9,15.1,0.0,0,0.0,False,False
+2023,5,143,Israel Abanikanda,NYJ,Pittsburgh,6,14.8,12.2,3,5.0,False,False
+2024,4,127,Will Shipley,PHI,Clemson,13,13.7,0.0,0,0.0,False,False
+2025,4,114,Trevor Etienne,CAR,Georgia,17,12.2,0.0,3,0.0,False,False
+2023,6,212,Deuce Vaughn,DAL,Kansas St.,6,11.5,1.7,1,1.7,False,False
+2022,6,183,Kevin Harris,NWE,South Carolina,5,11.2,2.2,2,1.9,False,False
+2022,5,154,Snoop Conner,JAX,Mississippi,5,10.2,8.5,3,7.7,False,False
+2023,5,172,Eric Gray,NYG,Oklahoma,10,10.0,3.4,2,2.1,False,False
+2022,3,93,Tyrion Davis-Price,SFO,LSU,5,9.9,3.5,2,3.0,False,False
+2025,7,239,Phil Mafah,DAL,Clemson,1,9.9,0.0,0,0.0,False,False
+2025,5,151,DJ Giddens,IND,Kansas St.,5,9.6,0.0,0,0.0,False,False
+2022,6,196,Tyler Badie,BAL,Missouri,1,8.9,0.0,0,0.0,False,False
+2025,3,83,Kaleb Johnson,PIT,Iowa,10,8.3,0.4,1,0.4,False,False
+2022,4,122,Zamir White,LVR,Georgia,11,7.0,0.4,1,0.4,False,False
+2022,4,123,Isaiah Spiller,LAC,Texas A&M,5,6.9,0.0,0,0.0,False,False
+2025,6,193,Tahj Brooks,CIN,Texas Tech,12,5.9,3.1,3,2.4,False,False
+2022,6,203,Trestan Ebner,CHI,Baylor,11,5.2,0.0,2,0.0,False,False
+2021,7,256,Kylin Hill,GNB,Mississippi St.,8,3.4,0.0,0,0.0,False,False
+2024,6,186,Jase McClellan,ATL,Alabama,2,3.2,0.0,0,0.0,False,False
+2024,5,165,Rasheen Ali,BAL,Marshall,5,3.1,3.1,3,3.2,False,False
+2024,3,88,MarShawn Lloyd,GNB,USC,1,2.3,0.0,0,0.0,False,False
+2022,5,169,Ty Chandler,MIN,North Carolina,2,2.0,0.0,0,0.0,False,False
+2023,6,215,Zach Evans,LAR,Mississippi,4,1.9,0.0,0,0.0,False,False
+2021,6,196,Gary Brightwell,NYG,Arizona,7,1.5,0.0,0,0.0,False,False
+2022,5,156,Jerome Ford,CLE,Cincinnati,13,1.2,0.9,3,0.9,False,False
+2023,5,176,Evan Hull,IND,Northwestern,1,1.2,0.0,0,0.0,False,False
+2025,6,188,Kalel Mullings,TEN,Michigan,4,0.7,0.7,3,0.4,False,False
+2021,7,233,Jake Funk,LAR,Maryland,5,0.5,-0.1,1,-0.1,False,False
+2021,7,244,Gerrid Doaks,MIA,Cincinnati,0,0.0,0.0,0,0.0,False,False
+2022,7,250,Brittain Brown,LVR,UCLA,1,0.0,0.0,0,0.0,False,False
+2023,7,222,DeWayne McBride,MIN,Ala-Birmingham,0,0.0,0.0,0,0.0,False,False
+2023,7,235,Lew Nichols,GNB,Central Michigan,0,0.0,0.0,0,0.0,False,False
+2023,7,237,Kenny McIntosh,SEA,Georgia,0,0.0,0.0,0,0.0,False,False
+2024,5,167,Keilan Robinson,JAX,Texas,1,0.0,0.0,0,0.0,False,False
+2024,6,205,Jawhar Jordan,HOU,Louisville,0,0.0,0.0,0,0.0,False,False
+2025,4,117,Jarquez Hunter,LAR,Auburn,0,0.0,0.0,0,0.0,False,False
+2025,5,147,Jordan James,SFO,Oregon,0,0.0,0.0,0,0.0,False,False
+2025,7,223,Damien Martinez,SEA,Miami (FL),0,0.0,0.0,0,0.0,False,False
+2024,6,208,Dylan Laube,LVR,New Hampshire,6,-2.0,0.0,2,0.0,False,False
